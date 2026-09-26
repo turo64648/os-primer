@@ -24,11 +24,11 @@ export const parts: Part[] = [
         topics: ['Kernel vs user mode, privilege rings', 'System calls: the mechanism and the cost', 'Interrupts, exceptions and traps', 'Monolithic vs microkernel', 'The vDSO'],
       },
       {
-        id: 'processes-and-threads', num: '2', title: 'Processes & Threads', link: '/foundations/processes-and-threads', ready: false,
+        id: 'processes-and-threads', num: '2', title: 'Processes & Threads', link: '/foundations/processes-and-threads', ready: true,
         topics: ['fork / exec / wait', 'Process states and the PCB (task_struct)', 'Threads vs processes: what is shared', 'Signals, SIGTERM vs SIGKILL, graceful shutdown', 'Zombies, orphans, reparenting, process groups and sessions'],
       },
       {
-        id: 'linking-and-loading', num: '3', title: 'Linking, Loading & Program Startup', link: '/foundations/linking-and-loading', ready: false,
+        id: 'linking-and-loading', num: '3', title: 'Linking, Loading & Program Startup', link: '/foundations/linking-and-loading', ready: true,
         topics: ['ELF: sections and segments', 'Static vs dynamic linking', 'PLT / GOT and lazy binding', 'LD_PRELOAD and symbol interposition', 'How exec builds the address space'],
       },
     ],
@@ -45,11 +45,11 @@ export const parts: Part[] = [
         topics: ['mmap: file-backed vs anonymous', 'Copy-on-write and fork', 'Page cache and reclaim (LRU lists, kswapd)', 'Swap, overcommit and the OOM killer', 'RSS vs VSZ vs PSS'],
       },
       {
-        id: 'allocators', num: '6', title: 'User-Space Allocators', link: '/memory/allocators', ready: false,
+        id: 'allocators', num: '6', title: 'User-Space Allocators', link: '/memory/allocators', ready: true,
         topics: ['How malloc gets memory (brk, mmap)', 'Free lists, size classes, arenas', 'Fragmentation: internal and external', 'jemalloc / tcmalloc / mimalloc', 'Why RSS does not shrink after free()'],
       },
       {
-        id: 'caches-and-numa', num: '7', title: 'CPU Caches & NUMA', link: '/memory/caches-and-numa', ready: false,
+        id: 'caches-and-numa', num: '7', title: 'CPU Caches & NUMA', link: '/memory/caches-and-numa', ready: true,
         topics: ['Cache hierarchy and latency numbers', 'Cache lines, locality, prefetching', 'Coherence (MESI) and false sharing', 'NUMA topology and locality', 'Data-oriented design in practice'],
       },
     ],
@@ -58,19 +58,19 @@ export const parts: Part[] = [
     title: 'III. CPU & Concurrency',
     chapters: [
       {
-        id: 'scheduling', num: '8', title: 'Scheduling & Context Switches', link: '/cpu/scheduling', ready: false,
+        id: 'scheduling', num: '8', title: 'Scheduling & Context Switches', link: '/cpu/scheduling', ready: true,
         topics: ['FCFS, SJF, round robin, MLFQ', 'Linux CFS and EEVDF', 'Context switch: what is saved and what it costs', 'Priorities, nice, real-time classes', 'CPU affinity and cgroup CPU limits'],
       },
       {
-        id: 'concurrency-1', num: '9', title: 'Concurrency I: Locks & Deadlock', link: '/cpu/concurrency-1', ready: false,
+        id: 'concurrency-1', num: '9', title: 'Concurrency I: Locks & Deadlock', link: '/cpu/concurrency-1', ready: true,
         topics: ['Race conditions and critical sections', 'Mutexes, spinlocks, condition variables', 'Semaphores and monitors', 'Deadlock: conditions, prevention, detection', 'Priority inversion'],
       },
       {
-        id: 'concurrency-2', num: '10', title: 'Concurrency II: Atomics & Memory Ordering', link: '/cpu/concurrency-2', ready: false,
+        id: 'concurrency-2', num: '10', title: 'Concurrency II: Atomics & Memory Ordering', link: '/cpu/concurrency-2', ready: true,
         topics: ['Atomic operations and CAS', 'Memory ordering: acquire / release / seq_cst', 'The ABA problem', 'futex: how user-space locks block', 'Reader-writer locks and RCU'],
       },
       {
-        id: 'ipc', num: '11', title: 'Inter-Process Communication', link: '/cpu/ipc', ready: false,
+        id: 'ipc', num: '11', title: 'Inter-Process Communication', link: '/cpu/ipc', ready: true,
         topics: ['Pipes and FIFOs', 'Unix domain sockets and fd passing', 'Shared memory', 'Message queues', 'Choosing an IPC mechanism'],
       },
     ],
@@ -83,15 +83,15 @@ export const parts: Part[] = [
         topics: ['Blocking vs non-blocking vs async', 'select / poll / epoll (level vs edge triggered)', 'io_uring', 'Zero-copy: sendfile, splice', 'The C10K problem and event loops'],
       },
       {
-        id: 'file-systems', num: '13', title: 'File Systems', link: '/io/file-systems', ready: false,
+        id: 'file-systems', num: '13', title: 'File Systems', link: '/io/file-systems', ready: true,
         topics: ['Inodes, directories, links', 'File descriptors and the open file table', 'The page cache and write-back', 'fsync, fdatasync, O_DIRECT', 'Journaling and crash consistency'],
       },
       {
-        id: 'storage-stack', num: '14', title: 'The Storage Stack', link: '/io/storage-stack', ready: false,
+        id: 'storage-stack', num: '14', title: 'The Storage Stack', link: '/io/storage-stack', ready: true,
         topics: ['The block layer and I/O schedulers', 'HDD vs SSD vs NVMe', 'SSD internals: FTL, write amplification', 'What durability actually guarantees', 'RAID basics'],
       },
       {
-        id: 'networking', num: '15', title: 'Networking in the Kernel', link: '/io/networking', ready: false,
+        id: 'networking', num: '15', title: 'Networking in the Kernel', link: '/io/networking', ready: true,
         topics: ['Sockets and socket buffers', 'TCP states, TIME_WAIT', 'SYN and accept queues, backlog', 'From syscall to NIC: the packet path', 'Interrupts, NAPI, RSS, kernel bypass'],
       },
     ],
@@ -100,19 +100,19 @@ export const parts: Part[] = [
     title: 'V. Systems',
     chapters: [
       {
-        id: 'time-and-timers', num: '16', title: 'Time & Timers', link: '/systems/time-and-timers', ready: false,
+        id: 'time-and-timers', num: '16', title: 'Time & Timers', link: '/systems/time-and-timers', ready: true,
         topics: ['Wall clock vs monotonic clock', 'clock_gettime and the vDSO', 'Timer interrupts, tickless kernels', 'hrtimers and timer wheels', 'Clock skew and NTP'],
       },
       {
-        id: 'security', num: '17', title: 'Security & Isolation', link: '/systems/security', ready: false,
+        id: 'security', num: '17', title: 'Security & Isolation', link: '/systems/security', ready: true,
         topics: ['Users, permissions, capabilities', 'seccomp', 'ASLR, stack canaries, NX', 'Spectre, Meltdown and KPTI', 'Why syscalls got more expensive'],
       },
       {
-        id: 'virtualization', num: '18', title: 'Virtualization & Containers', link: '/systems/virtualization', ready: false,
+        id: 'virtualization', num: '18', title: 'Virtualization & Containers', link: '/systems/virtualization', ready: true,
         topics: ['Hypervisors: type 1 vs type 2', 'Hardware virtualization and nested paging', 'Namespaces', 'cgroups', 'Containers vs VMs vs microVMs'],
       },
       {
-        id: 'performance', num: '19', title: 'Performance & Debugging', link: '/systems/performance', ready: false,
+        id: 'performance', num: '19', title: 'Performance & Debugging', link: '/systems/performance', ready: true,
         topics: ['The USE method', 'perf and flame graphs', 'strace, ltrace, bpftrace', 'Reasoning about tail latency', 'Latency numbers every engineer should know'],
       },
     ],

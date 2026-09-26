@@ -9,8 +9,8 @@ import { cards } from './processes-and-threads-review'
 # 2. Processes & Threads
 
 A process is a running program, and a thread is one line of execution inside it. Interviewers use them to
-probe how you think about isolation, cost and failure: why `fork` is fast, why a container ignores its stop
-signal, why a deploy drops requests, why zombies pile up.
+probe isolation, cost and failure: why `fork` is fast, why a container ignores its stop signal, why zombies
+pile up.
 
 ::: info Before you start
 - The <Term id="kernel">kernel</Term> is the core of the operating system. Programs ask it for things with
@@ -976,8 +976,8 @@ waits use `TASK_KILLABLE`, which fatal signals can interrupt.
 - **"kill sends SIGKILL."** `kill` sends `SIGTERM` by default. `kill -9` sends `SIGKILL`.
 - **"Linux has separate process and thread objects."** It has tasks. Threads are tasks that share memory,
   files and handlers.
-- **"A signal takes effect the moment it is sent."** It is marked pending and acted on when the target next
-  returns to user mode, or later if the target blocks it or is in `D` state.
+- **"A signal takes effect the moment it is sent."** It is marked pending. The target acts on it when it
+  next returns to user mode, or later if it blocks the signal or is in `D` state.
 - **"Every process dies on SIGTERM by default."** A PID 1 without a handler ignores it.
 
 ## Key takeaways
