@@ -16,6 +16,12 @@ import PageFaultDiagram from './components/diagrams/PageFaultDiagram.vue'
 import SyscallPathDiagram from './components/diagrams/SyscallPathDiagram.vue'
 import KernelEntryDiagram from './components/diagrams/KernelEntryDiagram.vue'
 import KernelDesignsDiagram from './components/diagrams/KernelDesignsDiagram.vue'
+import EpollDiagram from './components/diagrams/EpollDiagram.vue'
+import IoUringDiagram from './components/diagrams/IoUringDiagram.vue'
+import ZeroCopyDiagram from './components/diagrams/ZeroCopyDiagram.vue'
+import PageKindsDiagram from './components/diagrams/PageKindsDiagram.vue'
+import CowDiagram from './components/diagrams/CowDiagram.vue'
+import ReclaimWatermarksDiagram from './components/diagrams/ReclaimWatermarksDiagram.vue'
 
 export default {
   extends: DefaultTheme,
@@ -34,5 +40,11 @@ export default {
     app.component('SyscallPathDiagram', SyscallPathDiagram)
     app.component('KernelEntryDiagram', KernelEntryDiagram)
     app.component('KernelDesignsDiagram', KernelDesignsDiagram)
+    app.component('EpollDiagram', EpollDiagram)
+    app.component('IoUringDiagram', IoUringDiagram)
+    app.component('ZeroCopyDiagram', ZeroCopyDiagram)
+    app.component('PageKindsDiagram', PageKindsDiagram)
+    app.component('CowDiagram', CowDiagram)
+    app.component('ReclaimWatermarksDiagram', ReclaimWatermarksDiagram)
   },
 } satisfies Theme

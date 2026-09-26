@@ -41,7 +41,7 @@ export const parts: Part[] = [
         topics: ['Pages, frames and address translation', 'Multi-level page tables', 'The TLB, PCID and shootdowns', 'Page faults and demand paging', 'Huge pages'],
       },
       {
-        id: 'kernel-memory', num: '5', title: 'Kernel Memory Management', link: '/memory/kernel-memory', ready: false,
+        id: 'kernel-memory', num: '5', title: 'Kernel Memory Management', link: '/memory/kernel-memory', ready: true,
         topics: ['mmap: file-backed vs anonymous', 'Copy-on-write and fork', 'Page cache and reclaim (LRU lists, kswapd)', 'Swap, overcommit and the OOM killer', 'RSS vs VSZ vs PSS'],
       },
       {
@@ -79,7 +79,7 @@ export const parts: Part[] = [
     title: 'IV. I/O & Storage',
     chapters: [
       {
-        id: 'io-models', num: '12', title: 'I/O Models', link: '/io/io-models', ready: false,
+        id: 'io-models', num: '12', title: 'I/O Models', link: '/io/io-models', ready: true,
         topics: ['Blocking vs non-blocking vs async', 'select / poll / epoll (level vs edge triggered)', 'io_uring', 'Zero-copy: sendfile, splice', 'The C10K problem and event loops'],
       },
       {

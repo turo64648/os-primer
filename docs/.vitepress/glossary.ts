@@ -110,7 +110,7 @@ export const glossary: Record<string, GlossaryEntry> = {
   'page-cache': {
     term: 'Page cache',
     def: 'File data that the kernel keeps in RAM after reading or before writing it to disk, so repeated access does not need the disk.',
-    chapter: '/io/file-systems',
+    chapter: '/memory/kernel-memory',
   },
   swap: {
     term: 'Swap',
@@ -236,4 +236,63 @@ export const glossary: Record<string, GlossaryEntry> = {
     def: 'A Linux feature that restricts which system calls a process may make. Container runtimes and browsers use it to shrink the attack surface.',
     chapter: '/systems/security',
   },
+  socket: {
+  term: 'Socket',
+  def: 'The kernel object a program uses to send and receive data over a network (or between local processes). The program refers to it by a file descriptor.',
+  chapter: '/io/networking',
+  },
+  'blocking-io': {
+  term: 'Blocking I/O',
+  def: 'An I/O call that puts the thread to sleep until it can finish, for example a read that waits for network data. It is the default for every file descriptor.',
+  chapter: '/io/io-models',
+  },
+  'non-blocking-io': {
+  term: 'Non-blocking I/O',
+  def: 'An I/O mode in which a call that cannot make progress returns at once with the error EAGAIN, instead of sleeping. It is used together with a readiness API such as epoll.',
+  chapter: '/io/io-models',
+  },
+  epoll: {
+  term: 'epoll',
+  def: 'The Linux interface for watching many file descriptors at once. The kernel keeps the watch list and returns only the ones that are ready, so the cost follows ready connections, not watched ones.',
+  chapter: '/io/io-models',
+  },
+  'edge-triggered': {
+  term: 'Edge-triggered / level-triggered',
+  def: 'Two ways epoll can report readiness. Level-triggered reports a socket for as long as it has data. Edge-triggered reports it only when something new arrives, so the program must read until EAGAIN.',
+  chapter: '/io/io-models',
+  },
+  'event-loop': {
+  term: 'Event loop',
+  def: 'One thread that waits for events on many connections (usually with epoll or kqueue), runs a short handler for each, and waits again. Handlers must never block. nginx, Redis and Node.js are built this way.',
+  chapter: '/io/io-models',
+  },
+  backpressure: {
+  term: 'Backpressure',
+  def: 'Slowing a fast producer down when its consumer cannot keep up, for example by pausing reads while writes are pending, so buffers do not grow without limit.',
+  chapter: '/io/io-models',
+  },
+  'thundering-herd': {
+  term: 'Thundering herd',
+  def: 'When one event, such as a new connection, wakes many waiting threads although only one of them can handle it. The rest wake up for nothing and waste CPU.',
+  chapter: '/io/io-models',
+  },
+  'zero-copy': {
+  term: 'Zero-copy',
+  def: 'Moving data (for example from a file to a socket) without the CPU copying it through the program’s memory. sendfile and splice do this inside the kernel.',
+  chapter: '/io/io-models',
+  },
+  'file-backed-memory': { term: 'File-backed memory', def: 'Memory whose contents come from a file, such as program code or a mapped data file. If unchanged, the kernel can drop it and read it from the file again.', chapter: '/memory/kernel-memory' },
+  'anonymous-memory': { term: 'Anonymous memory', def: 'Memory with no file behind it: the heap, the stack and malloc blocks. The kernel can only free it by writing it to swap.', chapter: '/memory/kernel-memory' },
+  'dirty-page': { term: 'Dirty page', def: 'A page changed since it was read from its file. It must be written back before its frame can be reused.', chapter: '/memory/kernel-memory' },
+  'write-back': { term: 'Write-back', def: 'The kernel writing dirty page-cache pages to disk later, after write() has already returned.', chapter: '/memory/kernel-memory' },
+  'buddy-allocator': { term: 'Buddy allocator', def: 'The kernel’s allocator for physical frames. It keeps free blocks in power-of-two sizes, splits them to serve requests, and merges neighbours when freed.', chapter: '/memory/kernel-memory' },
+  'slab-allocator': { term: 'Slab allocator', def: 'Kernel allocator that cuts whole pages into slots for many small objects of one type, reusing freed slots.', chapter: '/memory/kernel-memory' },
+  reclaim: { term: 'Reclaim', def: 'The kernel freeing frames that hold data (dropping cache, writing back or swapping pages) so they can be reused.', chapter: '/memory/kernel-memory' },
+  'direct-reclaim': { term: 'Direct reclaim', def: 'When free memory is very low, a thread that asks for memory must free some itself first and waits. A common hidden cause of latency spikes.', chapter: '/memory/kernel-memory' },
+  'working-set': { term: 'Working set', def: 'The pages a program is actively using right now. If working sets do not fit in RAM, the system thrashes.', chapter: '/memory/kernel-memory' },
+  thrashing: { term: 'Thrashing', def: 'The system spends most of its time moving pages between RAM and disk, because the pages it evicts are needed again at once.', chapter: '/memory/kernel-memory' },
+  overcommit: { term: 'Overcommit', def: 'The kernel promising processes more memory than RAM plus swap, betting that most of it is never used.', chapter: '/memory/kernel-memory' },
+  psi: { term: 'PSI (pressure stall information)', def: 'Linux measure of how much time tasks lose waiting for CPU, memory or I/O, in /proc/pressure and per cgroup.', chapter: '/memory/kernel-memory' },
+  vsz: { term: 'VSZ (virtual size)', def: 'The total size of a process’s memory regions, including reserved addresses that have no RAM behind them.', chapter: '/memory/kernel-memory' },
+  pss: { term: 'PSS (proportional set size)', def: 'A process’s resident memory, with each shared page divided by the number of processes sharing it. PSS values add up correctly.', chapter: '/memory/kernel-memory' },
 }
