@@ -27,6 +27,8 @@ GitHub Pages by `.github/workflows/deploy.yml` on every push to `main`.
    Use 1–3 diagrams where they help understanding; do not add diagrams for decoration.
 6. Widgets are optional. Only add one if interacting with it teaches something the text cannot.
 7. Links to chapters that are not written yet are fine; `chapters.ts` has all paths.
+8. Length follows scope: most chapters land between 6,000 and 8,000 words. Do not pad a small topic or
+   cut a big one. Do not repeat what another chapter explains in full; recap it in a sentence and link.
 
 ### When several chapters are written in parallel
 
