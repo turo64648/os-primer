@@ -1,0 +1,15 @@
+{
+  "name": "os-primer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An in-depth operating systems primer for senior engineering interviews",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev docs",
+    "build": "vitepress build docs",
+    "preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}
