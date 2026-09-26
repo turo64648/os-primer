@@ -13,6 +13,9 @@ import VmOverviewDiagram from './components/diagrams/VmOverviewDiagram.vue'
 import PageWalkDiagram from './components/diagrams/PageWalkDiagram.vue'
 import AddressSpaceDiagram from './components/diagrams/AddressSpaceDiagram.vue'
 import PageFaultDiagram from './components/diagrams/PageFaultDiagram.vue'
+import SyscallPathDiagram from './components/diagrams/SyscallPathDiagram.vue'
+import KernelEntryDiagram from './components/diagrams/KernelEntryDiagram.vue'
+import KernelDesignsDiagram from './components/diagrams/KernelDesignsDiagram.vue'
 
 export default {
   extends: DefaultTheme,
@@ -28,5 +31,8 @@ export default {
     app.component('PageWalkDiagram', PageWalkDiagram)
     app.component('AddressSpaceDiagram', AddressSpaceDiagram)
     app.component('PageFaultDiagram', PageFaultDiagram)
+    app.component('SyscallPathDiagram', SyscallPathDiagram)
+    app.component('KernelEntryDiagram', KernelEntryDiagram)
+    app.component('KernelDesignsDiagram', KernelDesignsDiagram)
   },
 } satisfies Theme

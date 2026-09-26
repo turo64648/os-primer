@@ -20,7 +20,7 @@ export const parts: Part[] = [
     title: 'I. Foundations',
     chapters: [
       {
-        id: 'what-is-an-os', num: '1', title: 'What an OS Is', link: '/foundations/what-is-an-os', ready: false,
+        id: 'what-is-an-os', num: '1', title: 'What an OS Is', link: '/foundations/what-is-an-os', ready: true,
         topics: ['Kernel vs user mode, privilege rings', 'System calls: the mechanism and the cost', 'Interrupts, exceptions and traps', 'Monolithic vs microkernel', 'The vDSO'],
       },
       {

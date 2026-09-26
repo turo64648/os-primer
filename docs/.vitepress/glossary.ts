@@ -151,4 +151,89 @@ export const glossary: Record<string, GlossaryEntry> = {
     term: 'DMA (direct memory access)',
     def: 'A device such as a GPU or network card copying data to or from RAM by itself, without the CPU doing the copy.',
   },
+  exception: {
+    term: 'Exception',
+    def: 'When the CPU cannot complete the current instruction (for example a page fault or divide by zero), it stops and jumps into the kernel. The kernel either fixes the cause and re-runs the instruction, or kills the program.',
+    chapter: '/foundations/what-is-an-os',
+  },
+  trap: {
+    term: 'Trap',
+    def: 'An exception a program causes on purpose with a special instruction, to ask the kernel for something. System calls and debugger breakpoints are traps. The program continues at the next instruction.',
+    chapter: '/foundations/what-is-an-os',
+  },
+  preemption: {
+    term: 'Preemption',
+    def: 'The kernel taking the CPU away from a running thread without its cooperation, usually on a timer interrupt, so another thread can run.',
+    chapter: '/cpu/scheduling',
+  },
+  scheduler: {
+    term: 'Scheduler',
+    def: 'The part of the kernel that decides which thread runs next on each CPU core, and for how long.',
+    chapter: '/cpu/scheduling',
+  },
+  'file-descriptor': {
+    term: 'File descriptor',
+    def: 'A small number a process uses to refer to an open file, socket or pipe. 0, 1 and 2 are standard input, output and error.',
+    chapter: '/io/file-systems',
+  },
+  libc: {
+    term: 'libc (C standard library)',
+    def: 'The library every C program links against. It wraps system calls in ordinary functions and adds services such as printf and malloc. On Linux it is usually glibc or musl.',
+    chapter: '/foundations/what-is-an-os',
+  },
+  errno: {
+    term: 'errno',
+    def: 'A per-thread variable where libc stores the error code when a system call fails (the function itself returns -1). It is only meaningful right after a failure.',
+    chapter: '/foundations/what-is-an-os',
+  },
+  strace: {
+    term: 'strace',
+    def: 'A Linux tool that shows every system call a program makes, with arguments and results. Useful for debugging, but it slows the traced program a lot.',
+    chapter: '/systems/performance',
+  },
+  kpti: {
+    term: 'KPTI (kernel page-table isolation)',
+    def: 'The Linux defence against the Meltdown CPU flaw. It keeps most kernel memory out of a process’s page table while in user mode, so every kernel entry and exit switches page tables, which makes system calls more expensive.',
+    chapter: '/systems/security',
+  },
+  'io-uring': {
+    term: 'io_uring',
+    def: 'A Linux interface where a program and the kernel share two queues in memory, one for requests and one for results. Many I/O operations can be submitted with one system call, or none.',
+    chapter: '/io/io-models',
+  },
+  futex: {
+    term: 'futex',
+    def: 'A Linux system call that lets a thread sleep until a memory location changes. Locks use atomic instructions in user space and call futex only when a thread must wait.',
+    chapter: '/cpu/concurrency-2',
+  },
+  'kernel-bypass': {
+    term: 'Kernel bypass',
+    def: 'Letting a program talk to a device such as a network card or SSD directly, without system calls on the fast path. DPDK, SPDK and RDMA work this way.',
+    chapter: '/io/networking',
+  },
+  vdso: {
+    term: 'vDSO',
+    def: 'A small library the kernel maps into every process. It answers a few calls, mainly reading the clock, in user mode without a real system call.',
+    chapter: '/foundations/what-is-an-os',
+  },
+  'monolithic-kernel': {
+    term: 'Monolithic kernel',
+    def: 'A kernel that runs all OS services (file systems, networking, drivers) in kernel mode as one program. Linux is monolithic.',
+    chapter: '/foundations/what-is-an-os',
+  },
+  microkernel: {
+    term: 'Microkernel',
+    def: 'A kernel that keeps only threads, memory and messaging in kernel mode, and runs drivers and file systems as separate user-mode processes. Examples are seL4 and QNX.',
+    chapter: '/foundations/what-is-an-os',
+  },
+  ipc: {
+    term: 'IPC (inter-process communication)',
+    def: 'Any way for processes to exchange data or signals, such as pipes, sockets, shared memory or messages.',
+    chapter: '/cpu/ipc',
+  },
+  seccomp: {
+    term: 'seccomp',
+    def: 'A Linux feature that restricts which system calls a process may make. Container runtimes and browsers use it to shrink the attack surface.',
+    chapter: '/systems/security',
+  },
 }
