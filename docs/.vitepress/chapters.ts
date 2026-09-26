@@ -121,11 +121,11 @@ export const parts: Part[] = [
     title: 'Capstone & Appendix',
     chapters: [
       {
-        id: 'what-happens-when', num: 'C', title: 'What Happens When…', link: '/extras/what-happens-when', ready: false,
+        id: 'what-happens-when', num: 'C', title: 'What Happens When…', link: '/extras/what-happens-when', ready: true,
         topics: ['…you run ./a.out', '…you call read() on a file', '…a server accepts a connection', '…a process runs out of memory'],
       },
       {
-        id: 'question-bank', num: 'A', title: 'Interview Question Bank', link: '/extras/question-bank', ready: false,
+        id: 'question-bank', num: 'A', title: 'Interview Question Bank', link: '/extras/question-bank', ready: true,
         topics: ['All questions, indexed by chapter'],
       },
     ],
