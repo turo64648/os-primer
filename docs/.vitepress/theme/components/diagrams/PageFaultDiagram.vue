@@ -18,13 +18,13 @@
       <text x="200" y="173" text-anchor="middle" class="t">Hardware walks the page table</text>
 
       <rect x="40" y="212" width="320" height="40" rx="8" class="box-a" />
-      <text x="200" y="237" text-anchor="middle" class="tb">PTE present and access allowed?</text>
+      <text x="200" y="237" text-anchor="middle" class="tb">Entry present and access allowed?</text>
 
       <rect x="40" y="276" width="320" height="40" rx="8" class="box-d" />
       <text x="200" y="301" text-anchor="middle" class="tb">Page fault: trap into the kernel</text>
 
       <rect x="40" y="340" width="320" height="40" rx="8" class="box-a" />
-      <text x="200" y="365" text-anchor="middle" class="tb">Inside a VMA that allows this access?</text>
+      <text x="200" y="365" text-anchor="middle" class="tb">Address in a region the process owns?</text>
 
       <path d="M200 60 L200 84" class="ln" marker-end="url(#pf-ah)" />
       <path d="M200 124 L200 148" class="ln" marker-end="url(#pf-ah)" />
@@ -46,7 +46,7 @@
       <text x="366" y="226" class="m">yes</text>
 
       <rect x="400" y="340" width="220" height="40" rx="8" class="box-b" />
-      <text x="510" y="365" text-anchor="middle" class="tb">SIGSEGV</text>
+      <text x="510" y="365" text-anchor="middle" class="tb">Crash (SIGSEGV)</text>
       <path d="M360 360 L400 360" class="ln" marker-end="url(#pf-ah)" />
       <text x="370" y="354" class="m">no</text>
 
@@ -72,7 +72,7 @@
 
       <path d="M130 468 L130 492 M330 468 L330 492 M530 468 L530 492" class="ln" marker-end="url(#pf-ah)" />
       <rect x="40" y="492" width="580" height="40" rx="8" class="box-d" />
-      <text x="330" y="517" text-anchor="middle" class="t">Update the PTE, return from the fault, re-run the instruction</text>
+      <text x="330" y="517" text-anchor="middle" class="t">Kernel updates the page table; CPU re-runs the instruction</text>
 
       <!-- retry loop -->
       <path d="M40 512 L18 512 L18 40 L40 40" class="ln-dash" marker-end="url(#pf-ah)" />

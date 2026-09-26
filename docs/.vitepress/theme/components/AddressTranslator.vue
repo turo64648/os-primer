@@ -64,10 +64,10 @@ const fields = computed(() => {
   const va = parsed.value
   if (va === null) return null
   return [
-    { name: 'L4 (PML4)', bits: '47–39', value: (va >> 39n) & 0x1ffn, cls: 'f1' },
-    { name: 'L3 (PDPT)', bits: '38–30', value: (va >> 30n) & 0x1ffn, cls: 'f2' },
-    { name: 'L2 (PD)', bits: '29–21', value: (va >> 21n) & 0x1ffn, cls: 'f3' },
-    { name: 'L1 (PT)', bits: '20–12', value: (va >> 12n) & 0x1ffn, cls: 'f4' },
+    { name: 'Index 4', bits: '47–39', value: (va >> 39n) & 0x1ffn, cls: 'f1' },
+    { name: 'Index 3', bits: '38–30', value: (va >> 30n) & 0x1ffn, cls: 'f2' },
+    { name: 'Index 2', bits: '29–21', value: (va >> 21n) & 0x1ffn, cls: 'f3' },
+    { name: 'Index 1', bits: '20–12', value: (va >> 12n) & 0x1ffn, cls: 'f4' },
     { name: 'Offset', bits: '11–0', value: va & 0xfffn, cls: 'f5' },
   ]
 })
@@ -92,7 +92,7 @@ function access(va: bigint, log: Step[] | null): bigint | null {
   state.stats.accesses++
   if (va >= 0x800000000000n) {
     state.stats.segv++
-    push('error', `${hex(va)} is in the kernel half / non-canonical range. User mode may not touch it → fault → SIGSEGV.`)
+    push('error', `${hex(va)} belongs to the kernel. User programs may not touch it, so the access fails → SIGSEGV (crash).`)
     return null
   }
   const vpn = va / PAGE
@@ -101,32 +101,32 @@ function access(va: bigint, log: Step[] | null): bigint | null {
   const hit = tlbLookup(vpn)
   if (hit !== null) {
     state.stats.hits++
-    push('hit', `TLB hit for VPN ${hex(vpn)} → frame ${hex(hit)}. No page-table memory accesses needed.`)
+    push('hit', `TLB hit: page ${hex(vpn)} is in frame ${hex(hit)}. No page table reads needed.`)
     const pa = hit * PAGE + off
     push('ok', `Physical address = frame ${hex(hit)} × 4096 + offset ${hex(off)} = ${hex(pa)}`)
     return pa
   }
 
   state.stats.misses++
-  push('miss', `TLB miss for VPN ${hex(vpn)}. The MMU walks the page table, starting at CR3.`)
+  push('miss', `TLB miss for page ${hex(vpn)}. The CPU walks the page table, starting from the top-level table.`)
   for (let attempt = 0; attempt < 2; attempt++) {
     const idx = [39n, 30n, 21n, 12n].map((s) => (va >> s) & 0x1ffn)
-    const names = ['PML4', 'PDPT', 'PD', 'PT']
+    const names = ['level-4', 'level-3', 'level-2', 'level-1']
     const pfn = state.pageTable.get(vpn)
-    if (attempt === 1) push('info', 'Retry: the TLB still has no entry, so the MMU walks the table again.')
+    if (attempt === 1) push('info', 'Retry: the TLB still has no translation, so the CPU walks the table again.')
     // Simplification: upper-level tables always exist, so only the last level can be missing.
     for (let l = 0; l < 4; l++) {
       state.stats.walkRefs++
       const last = l === 3
       if (last && pfn === undefined) {
-        push('info', `Read ${names[l]}[${idx[l]}] (memory access ${l + 1}/4): Present bit = 0.`)
+        push('info', `Read ${names[l]} table, entry ${idx[l]} (memory read ${l + 1}/4): marked not present.`)
       } else {
-        push('info', `Read ${names[l]}[${idx[l]}] (memory access ${l + 1}/4) → ${last ? 'frame ' + hex(pfn!) : 'next-level table'}`)
+        push('info', `Read ${names[l]} table, entry ${idx[l]} (memory read ${l + 1}/4) → ${last ? 'frame ' + hex(pfn!) : 'next table'}`)
       }
     }
     if (pfn !== undefined) {
       const evicted = tlbFill(vpn, pfn)
-      push('info', `Fill TLB with VPN ${hex(vpn)} → ${hex(pfn)}${evicted !== null ? ` (evicts LRU entry VPN ${hex(evicted)})` : ''}.`)
+      push('info', `Save page ${hex(vpn)} → frame ${hex(pfn)} in the TLB${evicted !== null ? ` (replacing the least recently used entry, page ${hex(evicted)})` : ''}.`)
       const pa = pfn * PAGE + off
       push('ok', `Physical address = ${hex(pa)}`)
       return pa
@@ -136,13 +136,13 @@ function access(va: bigint, log: Step[] | null): bigint | null {
     const vma = vmas.find((v) => va >= v.start && va < v.end)
     if (!vma) {
       state.stats.segv++
-      push('error', `Page fault → kernel finds no VMA containing ${hex(va)} → sends SIGSEGV. (Segmentation fault.)`)
+      push('error', `Page fault. The kernel finds that ${hex(va)} is not in any region the process owns → SIGSEGV (crash).`)
       return null
     }
     state.stats.faults++
     const frame = state.nextPfn++
     state.pageTable.set(vpn, frame)
-    push('fault', `Page fault (#PF). Kernel finds VMA "${vma.name}", allocates zeroed frame ${hex(frame)}, writes the PTE and returns. The CPU re-executes the instruction.`)
+    push('fault', `Page fault. The kernel sees the address is in the ${vma.name.split(' ')[0]} region, gives the page a fresh zeroed frame ${hex(frame)}, updates the page table and returns. The CPU re-runs the instruction.`)
   }
   return null
 }
@@ -183,7 +183,7 @@ function reset() {
   <div class="widget translator">
     <h4>Try it: virtual → physical translation</h4>
     <p class="intro">
-      A toy x86-64 MMU with a 4-entry TLB. Mapped regions: code <code>0x400000–0x40ffff</code> (first 4 pages already
+      A simplified x86-64 CPU with a 4-entry TLB. The process owns three regions: code <code>0x400000–0x40ffff</code> (first 4 pages already
       resident), heap <code>0x600000–0x6fffff</code> (nothing resident yet), stack near <code>0x7ffffffff000</code>.
     </p>
 

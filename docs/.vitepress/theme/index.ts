@@ -7,7 +7,8 @@ import ChapterList from './components/ChapterList.vue'
 import ChapterStub from './components/ChapterStub.vue'
 import Flashcards from './components/Flashcards.vue'
 import MarkDone from './components/MarkDone.vue'
-import Quiz from './components/Quiz.vue'
+import Term from './components/Term.vue'
+import GlossaryList from './components/GlossaryList.vue'
 import VmOverviewDiagram from './components/diagrams/VmOverviewDiagram.vue'
 import PageWalkDiagram from './components/diagrams/PageWalkDiagram.vue'
 import AddressSpaceDiagram from './components/diagrams/AddressSpaceDiagram.vue'
@@ -21,7 +22,8 @@ export default {
     app.component('ChapterStub', ChapterStub)
     app.component('Flashcards', Flashcards)
     app.component('MarkDone', MarkDone)
-    app.component('Quiz', Quiz)
+    app.component('Term', Term)
+    app.component('GlossaryList', GlossaryList)
     app.component('VmOverviewDiagram', VmOverviewDiagram)
     app.component('PageWalkDiagram', PageWalkDiagram)
     app.component('AddressSpaceDiagram', AddressSpaceDiagram)

@@ -13,16 +13,20 @@ model from first principles, then connects it to real systems and to the questio
 - **Interview questions.** From basic to senior-level follow-ups, each with a model answer. Try to answer out
   loud before opening it.
 - **Misconceptions.** Things that sound right but aren't, and are common in interviews.
-- **Flashcards and a quiz.** For review in a few days' time.
+- **Going deeper boxes.** Collapsed by default. The main text makes sense without them; open them for
+  hardware names and precise details that interviewers sometimes probe.
+- **Tap-to-see terms.** Words with a dotted underline show a short definition when you tap them. All of
+  them are also on the [Glossary](/glossary) page.
+- **Flashcards.** For review a few days later. They ask *why* and *how*, not trivia.
 
 ## A suggested routine
 
 1. Read a chapter in one sitting, running the code and playing with the widgets.
-2. The next day, do the flashcards and quiz without re-reading.
+2. The next day, go through the flashcards without re-reading.
 3. Answer the interview questions **out loud**, as if to an interviewer, and only then compare with the model answer.
 4. A week later, redo the flashcards. Mark the chapter as done once they feel easy.
 
-Your progress (chapters done, known flashcards, best quiz scores) is saved in this browser only.
+Your progress (chapters done, known flashcards) is saved in this browser only.
 
 ## How interviewers use OS questions
 

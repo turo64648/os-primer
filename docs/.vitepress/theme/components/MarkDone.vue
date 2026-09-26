@@ -19,7 +19,7 @@ function toggle() {
 
 <template>
   <div class="mark-done" :class="{ done }">
-    <span>{{ done ? 'You marked this chapter as done.' : 'Finished the chapter, the flashcards and the quiz?' }}</span>
+    <span>{{ done ? 'You marked this chapter as done.' : 'Finished the chapter and the flashcards?' }}</span>
     <button @click="toggle">{{ done ? 'Mark as not done' : 'Mark chapter as done' }}</button>
   </div>
 </template>

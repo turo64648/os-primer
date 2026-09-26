@@ -20,9 +20,13 @@ export default defineConfig({
     nav: [
       { text: 'Start here', link: '/how-to-use' },
       { text: 'Chapters', link: '/#chapters' },
+      { text: 'Glossary', link: '/glossary' },
     ],
     sidebar: [
-      { text: 'Start here', items: [{ text: 'How to use this primer', link: '/how-to-use' }] },
+      { text: 'Start here', items: [
+          { text: 'How to use this primer', link: '/how-to-use' },
+          { text: 'Glossary', link: '/glossary' },
+        ] },
       ...parts.map((p) => ({
         text: p.title,
         collapsed: false,

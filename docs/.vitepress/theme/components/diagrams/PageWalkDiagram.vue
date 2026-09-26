@@ -1,16 +1,16 @@
 <script setup lang="ts">
 const fields = [
-  { x: 20, w: 110, label: 'L4 index', bits: '9 bits', cls: 'box-a' },
-  { x: 130, w: 110, label: 'L3 index', bits: '9 bits', cls: 'box-c' },
-  { x: 240, w: 110, label: 'L2 index', bits: '9 bits', cls: 'box-d' },
-  { x: 350, w: 110, label: 'L1 index', bits: '9 bits', cls: 'box-b' },
+  { x: 20, w: 110, label: 'Index 4', bits: '9 bits', cls: 'box-a' },
+  { x: 130, w: 110, label: 'Index 3', bits: '9 bits', cls: 'box-c' },
+  { x: 240, w: 110, label: 'Index 2', bits: '9 bits', cls: 'box-d' },
+  { x: 350, w: 110, label: 'Index 1', bits: '9 bits', cls: 'box-b' },
   { x: 460, w: 160, label: 'offset', bits: '12 bits', cls: 'box' },
 ]
 const tables = [
-  { x: 27, name: 'PML4', e: 190, cls: 'box-a' },
-  { x: 137, name: 'PDPT', e: 232, cls: 'box-c' },
-  { x: 247, name: 'PD', e: 205, cls: 'box-d' },
-  { x: 357, name: 'PT', e: 250, cls: 'box-b' },
+  { x: 27, name: 'Level 4', e: 190, cls: 'box-a' },
+  { x: 137, name: 'Level 3', e: 232, cls: 'box-c' },
+  { x: 247, name: 'Level 2', e: 205, cls: 'box-d' },
+  { x: 357, name: 'Level 1', e: 250, cls: 'box-b' },
 ]
 </script>
 
@@ -56,11 +56,11 @@ const tables = [
       <path d="M540 80 L540 262" class="ln-dash" marker-end="url(#pw-ah)" />
 
       <path d="M40 318 L40 292" class="ln" marker-end="url(#pw-ah)" />
-      <text x="50" y="324" class="m">CR3 register holds the physical address of the PML4 (one per process)</text>
+      <text x="50" y="324" class="m">A CPU register points to this process's level-4 table</text>
     </svg>
     <figcaption>
-      Each 9-bit index selects one of 512 eight-byte entries in a 4 KiB table. A TLB miss costs up to four
-      dependent memory reads before the data read itself.
+      Each 9-bit index picks one of 512 entries in a table. Without help from the TLB, the CPU makes four
+      memory reads, one per level, before it can read the data itself.
     </figcaption>
   </figure>
 </template>

@@ -3,274 +3,331 @@ title: 4. Virtual Memory
 ---
 
 <script setup>
-import { cards, quiz } from './vm-review'
+import { cards } from './vm-review'
 </script>
 
 # 4. Virtual Memory
 
-Virtual memory is the single most important idea in a modern OS. Processes, `fork`, shared libraries,
-`mmap`, containers' memory limits and most "why is my service slow" stories about memory all rest on it.
-It's also the favourite source of interview follow-ups, because a good answer naturally chains from
-definitions into hardware, kernel and production behaviour.
+Virtual memory is the idea that every program gets its own private view of memory. Processes, `fork`,
+shared libraries, memory-mapped files and many latency problems all depend on it. That makes it one of the
+most common starting points for deeper interview questions.
 
-::: info What you'll be able to explain after this chapter
-- How a virtual address becomes a physical one, step by step, on x86-64
-- Why page tables are trees, and what each entry contains
-- What the TLB is, what a miss costs, and what happens to it on a context switch
-- The kinds of page fault, what each costs, and how to measure them
-- When huge pages help and when they hurt
-- How all of this shows up in databases, `fork`, `mmap` and latency-sensitive services
+::: info Before you start
+- A <Term id="process">process</Term> is a running program. The <Term id="kernel">kernel</Term> is the core
+  of the operating system, which manages all processes.
+- Programs run in a restricted <Term id="user-mode">user mode</Term>. The kernel runs in a privileged kernel
+  mode and can do anything.
+- The CPU reads and writes RAM using **addresses**: numbers that say which byte to use.
+
+You do not need anything else. [Chapter 1](/foundations/what-is-an-os) covers these ideas in full.
 :::
 
 ## The problem virtual memory solves
 
-Imagine programs used **physical** addresses directly, as early computers and today's small
-microcontrollers do. Several problems appear at once:
+**In short:** if programs used real RAM addresses, they could damage each other and would be hard to place
+in memory. Virtual memory adds a translation step that fixes this.
 
-- **No isolation.** A stray pointer in one program can overwrite another program, or the kernel.
-- **Relocation.** Every program must be loaded at a different physical address, so either the compiler must
-  know where it will run, or the loader must patch every address.
-- **Fragmentation.** Programs start and exit, leaving holes in RAM. A new program needing 100 MB may not
-  fit in any single hole even when 1 GB is free in total.
-- **Limited to physical RAM**, and no easy way to share memory between programs only where you want to.
+Imagine each program used real RAM addresses directly. Small microcontrollers still work this way.
+Several problems appear at once:
 
-Virtual memory solves all of these with **one level of indirection, enforced by hardware on every memory
-access**. Each process gets its own private address space. Every load, store and instruction fetch uses a
-*virtual* address, which the CPU's **memory management unit (MMU)** translates to a *physical* address using
-tables that the **kernel** maintains.
+- **No protection.** A bug in one program can overwrite another program, or the kernel.
+- **Placement is hard.** Each program must know where in RAM it was loaded, or all its addresses must be
+  patched when it starts.
+- **RAM fragments.** As programs start and stop, free RAM breaks into small gaps. A program that needs one
+  large block may not fit anywhere, even when enough RAM is free in total.
+- **No controlled sharing.** Two programs cannot easily share only some memory.
 
-That indirection is what makes all of these possible:
+Virtual memory fixes all of these with one idea. Each process gets its own private
+<Term id="address-space">address space</Term>. Programs only ever use
+<Term id="virtual-address">virtual addresses</Term>. On every memory access, the hardware translates the
+virtual address into a <Term id="physical-address">physical address</Term>, which is a real location in
+RAM. It uses tables that the kernel sets up for each process.
 
-| Feature | How the indirection enables it |
+Because every access goes through this translation, the kernel gets a lot of control:
+
+| Feature | How translation makes it possible |
 |---|---|
-| Isolation | A process can only reach frames that its own page table points to. |
-| Simple loading | Every program can use the same virtual layout, wherever it sits in RAM. |
-| No external fragmentation | Contiguous virtual pages can map to scattered physical frames. |
-| Sharing | Two page tables can point at the same frame (shared libraries, shared memory). |
-| Lazy allocation | A virtual page can be valid but have no frame until it's first touched. |
-| Copy-on-write | `fork` shares frames read-only and copies only on write. |
-| Memory-mapped files | A virtual page can be backed by a file, filled on demand from the page cache. |
-| Protection | Per-page read / write / execute / user permissions. |
-| Swapping | A page's contents can be moved to disk and brought back on access. |
+| Protection | A process can only reach the RAM that its own table points to. |
+| Simple layout | Every program can use the same addresses, wherever it really is in RAM. |
+| No fragmentation | Neighbouring virtual addresses can map to scattered pieces of RAM. |
+| Sharing | Two processes' tables can point to the same RAM (for example, shared libraries). |
+| Memory on demand | An address can be valid but get RAM only when first used. |
+| Cheap copies | `fork` shares memory and copies a piece only when someone writes to it. |
+| Files as memory | A range of addresses can show a file's contents, loaded when read. |
+| Permissions | Each piece of memory can be read-only, writable, or executable. |
 
-::: tip Remember the split of responsibilities
-The **hardware** translates every access and raises a fault when it can't. The **kernel** decides what the
-mappings are, and handles faults. On a normal access the kernel isn't involved at all.
+::: tip Who does what
+The **hardware** translates every access. The **kernel** decides what the translations are, and steps in
+only when the hardware cannot translate an address. On a normal memory access, the kernel does nothing.
 :::
 
 ## Pages and frames
 
-Translating each byte individually would need absurdly large tables, so memory is managed in fixed-size
-blocks:
+**In short:** memory is translated in fixed blocks of 4 KiB. A block of virtual memory is a page. A block
+of RAM is a frame.
 
-- A **page** is a block of *virtual* memory, usually **4 KiB** (4096 bytes).
-- A **frame** (or page frame) is a block of *physical* memory of the same size.
-- The page table maps **virtual page numbers (VPN)** to **physical frame numbers (PFN)**.
+Translating every byte separately would need enormous tables. So memory is split into fixed-size blocks,
+usually **4 KiB** (4096 bytes):
 
-Because 4096 = 2<sup>12</sup>, the low 12 bits of an address are the **offset** within the page and the
-rest is the page number. Only the page number is translated; the offset is copied unchanged.
+- A <Term id="page">page</Term> is a 4 KiB block of virtual memory.
+- A <Term id="frame">frame</Term> is a 4 KiB block of RAM.
+- A <Term id="page-table">page table</Term> records which frame holds each page. Each process has its own
+  page table.
+
+Here is how an address splits up. 4096 is 2<sup>12</sup>, so the lowest 12 bits of an address say where
+you are **inside** the page. This part is called the **offset**. The remaining bits are the **page
+number**. Only the page number is translated. The offset stays the same.
 
 ```text
 virtual address   0x00007f3a12345678
-page number       0x00007f3a12345      (address >> 12)
-offset                         0x678   (address & 0xfff)
+page number       0x00007f3a12345      (the address without its last 12 bits)
+offset                         0x678   (the last 12 bits)
 
-if the page table maps VPN 0x7f3a12345 -> PFN 0x1b2c4, then
-physical address  0x1b2c4678           (PFN << 12 | offset)
+the page table says: page 0x7f3a12345 is in frame 0x1b2c4
+physical address  0x1b2c4678           (frame number, then the same offset)
 ```
 
 <VmOverviewDiagram />
 
-Fixed-size pages are what eliminate external fragmentation: any free frame will do for any page. The price is
-**internal fragmentation**, since a 100-byte allocation still occupies part of a 4 KiB page. That trade-off
-comes back when we discuss huge pages.
+Fixed-size blocks mean RAM cannot fragment: any free frame can hold any page. The cost is some wasted
+space. A 100-byte allocation still uses part of a 4 KiB page. This trade-off comes back in the huge pages
+section.
 
 ## Page tables
 
-### Why not one big array?
+**In short:** the page table is a tree, not a list, because most of a process's address space is unused.
 
-The simplest page table is an array indexed by page number. On x86-64, user space has 2<sup>47</sup> bytes
-of virtual addresses, which is 2<sup>35</sup> pages (the full 48-bit space is 2<sup>36</sup>). With 8 bytes
-per entry that is **hundreds of GiB of page table per process**, almost all of it describing addresses the
-process never uses.
+### Why not one big list?
 
-Real address spaces are **sparse**: a bit of code near the bottom, a heap, some libraries, a stack near the
-top, and terabytes of nothing between them. So page tables are **trees** (radix trees) where whole subtrees
-are simply absent for unused regions.
+The simplest page table would be a list with one entry per page. But a 64-bit process can use about 128 TiB
+of addresses. That is about 34 billion pages. At 8 bytes per entry, the list would take **hundreds of GiB for
+every process**.
 
-### The x86-64 four-level walk
+Almost all of those entries would be empty. A real process uses a few small areas: its code, its data, a
+stack, some libraries. Between them are huge unused gaps.
 
-x86-64 uses 48-bit virtual addresses (57-bit with 5-level paging on newer CPUs). The address is split into
-four 9-bit indices and a 12-bit offset:
+So the page table is a **tree**. The top level splits the address space into large parts. Each part that is
+in use has its own smaller table below it, and so on. Unused parts have no tables at all. A small process
+needs only a few dozen KiB of tables.
+
+### Walking the tree
+
+On x86-64, the tree has **four levels**. The page number is split into four 9-bit pieces, one for each
+level. The CPU uses them like this:
 
 <PageWalkDiagram />
 
-1. The **CR3** register holds the physical address of the top-level table, the **PML4**. Each process has its
-   own, and switching processes means loading a new value into CR3.
-2. Bits 47–39 index the PML4. The entry found there points to a **PDPT**.
-3. Bits 38–30 index the PDPT, which points to a **page directory (PD)**.
-4. Bits 29–21 index the PD, which points to a **page table (PT)**.
-5. Bits 20–12 index the PT, whose entry holds the **frame number**.
-6. Frame number + the 12-bit offset = the physical address.
+1. The CPU keeps the location of the current process's top table in a <Term id="register">register</Term>,
+   a small storage slot inside the CPU.
+2. It uses the first 9-bit piece to pick an entry in the top table. That entry points to a table on the
+   next level.
+3. It repeats this with the second and third pieces.
+4. The fourth piece picks an entry in the last table. That entry holds the **frame number**.
+5. Frame number + offset = the physical address.
 
-Notice the design: 9 bits index 512 entries, and 512 entries × 8 bytes = **4096 bytes, exactly one page**.
-Every table is itself one page-sized frame, so the kernel allocates page tables with the same allocator as
-everything else.
+Each table has 512 entries (2<sup>9</sup>), and each entry is 8 bytes. So each table is exactly 4 KiB: one
+page. This means the kernel stores page tables in ordinary frames, like any other data.
 
-A small process might touch a few megabytes in three or four regions. Its page tables need one PML4 plus a
-handful of lower-level tables for each region: a few dozen KiB instead of hundreds of GiB. That is the whole
-point of the tree.
+This whole process is called a **page walk**. The part of the CPU that does it is the
+<Term id="mmu">memory management unit (MMU)</Term>. The kernel builds the tables, but the MMU reads them. No
+kernel code runs during a normal translation.
 
-::: details Canonical addresses: why there's a huge hole in the middle
-With 48-bit addressing, bits 63–48 of a pointer must be copies of bit 47. Addresses that follow this rule are
-**canonical**; using any other address raises a fault. This splits the 64-bit space into a *lower half*
-(`0x0000000000000000`–`0x00007fffffffffff`, user space on Linux) and an *upper half*
-(`0xffff800000000000`–`0xffffffffffffffff`, the kernel), with an enormous unusable gap in between. 5-level
-paging (57-bit addresses, 128 PiB) moves the boundary but keeps the idea.
+When the kernel switches to another process, it loads that process's top-table location into the register.
+From then on, every address is translated with the new process's tree.
+
+::: details Going deeper: the x86-64 names and details
+- The register is called **CR3**. The four levels are called **PML4**, **PDPT**, **PD** (page directory) and
+  **PT** (page table).
+- x86-64 uses 48-bit virtual addresses: 4 × 9 bits of index + 12 bits of offset. Newer CPUs support
+  **5-level paging** with 57-bit addresses.
+- **Canonical addresses:** the top 16 bits of a pointer must all copy bit 47. This splits the 64-bit space
+  into a low half (user programs on Linux, up to `0x00007fffffffffff`) and a high half (the kernel, from
+  `0xffff800000000000`). Any address in the gap between them always faults.
+- Some older architectures, such as MIPS, had no hardware walker. Every TLB miss trapped into the kernel,
+  which did the walk in software.
 :::
 
-### What's in a page table entry
+### What a page table entry holds
 
-Each 8-byte entry (PTE) holds a frame number plus flag bits that the hardware checks on every access:
+Each entry in the last-level table holds a frame number and a few flag bits. The MMU checks the flags on
+every access:
 
-| Bit | Meaning | Why it matters |
+| Flag | Meaning | Why it matters |
 |---|---|---|
-| **Present (P)** | The entry is valid and points to a frame. | If 0, any access faults. The kernel is free to use the other bits, e.g. to record where a swapped-out page lives. |
-| **Read/Write (R/W)** | Writes allowed. | Read-only code; copy-on-write works by clearing this bit. |
-| **User/Supervisor (U/S)** | User mode may access. | Keeps the kernel's mappings unreachable from user code. |
-| **Accessed (A)** | Set by hardware on any access. | The kernel scans and clears it to approximate "recently used" when choosing pages to evict. |
-| **Dirty (D)** | Set by hardware on a write. | A clean file-backed page can simply be dropped; a dirty one must be written back first. |
-| **No-execute (NX)** | Instruction fetches forbidden. | Stops injected data (e.g. on the stack) being run as code. |
-| **Global (G)** | Not flushed from the TLB on CR3 switches. | Used for kernel mappings, which are identical in every process. |
-| **Page size (PS)** | In a PD or PDPT entry: this entry maps a huge page directly. | 2 MiB or 1 GiB pages end the walk early. |
+| **Present** | This page has a frame. | If not set, any access causes a page fault. |
+| **Writable** | Writes are allowed. | Code is read-only. Copy-on-write works by turning this off. |
+| **User** | User-mode code may access it. | Keeps kernel memory out of reach of programs. |
+| **Accessed** | The page was used recently. | The kernel uses it to pick pages that are safe to evict. |
+| **Dirty** | The page was written to. | A page that changed must be saved to disk before its frame can be reused. |
+| **No-execute** | Code in this page must not run. | Stops attackers from running data (for example, on the stack) as code. |
 
-### Who walks the table?
+The MMU sets the Accessed and Dirty flags by itself. The kernel reads and clears them.
 
-On x86 and ARM, the walk is done by a **hardware page walker** inside the MMU. The kernel only writes the
-tables; it never runs code for a normal translation. (Some older architectures such as MIPS used a
-*software-managed* TLB, where every TLB miss trapped into the kernel. That's rare today, but a nice
-contrast to mention in an interview.)
+::: details Going deeper: more flags
+- **Global**: this translation stays in the TLB when the process changes. It is used for kernel memory,
+  which looks the same in every process.
+- **Page size**: set in a higher-level entry, it means that entry maps a huge page directly and the walk
+  stops early.
+- When **Present** is not set, the MMU ignores the other bits. Linux uses them to record where a page was
+  saved in swap.
+:::
 
 ## The TLB
 
-A four-level walk means up to **four extra, dependent memory reads** before the real read can even begin.
-Dependent means each must finish before the next can start, because it supplies the address of the next
-table. Doing that on every access would make memory several times slower.
+**In short:** walking the tree on every access would be very slow, so the CPU caches recent translations in
+the TLB.
 
-The fix is a cache. The **translation lookaside buffer (TLB)** is a small, very fast, per-core cache of
-recent translations: *virtual page → physical frame + permissions*.
+A page walk needs four memory reads, one per level, before the real read can start. Each read needs the
+result of the one before it, so they cannot happen in parallel. Doing this on every access would make
+memory several times slower.
 
-- A **TLB hit** costs essentially nothing; the lookup happens in parallel with the L1 cache access.
-- A **TLB miss** triggers the page walk. If the page-table entries are in the CPU caches, it costs tens of
-  cycles; if they must come from DRAM, it can be hundreds.
+So the CPU keeps a small cache of recent translations, "page X is in frame Y, with these permissions". This
+cache is the <Term id="tlb">translation lookaside buffer (TLB)</Term>. Each CPU core has its own.
 
-Modern cores have a two-level TLB: a small L1 data TLB (tens of entries) and a larger shared L2 TLB
-(roughly 1,000–3,000 entries). Exact sizes vary by CPU generation; the order of magnitude is what matters.
+- **TLB hit:** the translation is in the cache. It costs almost nothing.
+- **TLB miss:** the CPU must walk the tree. It costs from tens of CPU cycles (if the tables are in the CPU's
+  memory caches) to hundreds (if they must come from RAM).
 
 ### TLB reach
 
-The most useful number to reason with is **TLB reach**: entries × page size.
+The TLB holds only a limited number of translations, around 1,500 on a typical modern core. The most useful
+number to reason with is its **reach**: how much memory those translations cover.
 
 ```text
-1,536 entries × 4 KiB  ≈ 6 MiB
-1,536 entries × 2 MiB  ≈ 3 GiB
+1,536 translations × 4 KiB pages  ≈ 6 MiB
+1,536 translations × 2 MiB pages  ≈ 3 GiB
 ```
 
-A workload whose hot data fits in the reach barely misses. A workload doing **random access over gigabytes**
-(hash tables, B-trees, graph traversal, a database buffer pool, embedding tables) misses on almost every
-access, and can spend a significant share of its time in page walks. This is the main reason huge pages
-exist.
+If a program's frequently used data fits within the reach, it rarely misses. A program that jumps around
+**gigabytes** of memory at random misses on almost every access. Examples are big hash tables, database
+indexes, graph algorithms and embedding lookups. Such programs can spend a large share of their time on page
+walks. This is the main reason huge pages exist.
+
+::: details Going deeper: real TLB sizes
+Modern cores have two TLB levels: a small first-level data TLB (around 64 entries) and a larger second-level
+TLB (around 1,000 to 3,000 entries). Sizes change with each CPU generation, and huge pages may have separate
+or fewer entries. The CPU also caches upper levels of the tree separately, so many misses need fewer than
+four reads.
+:::
 
 <AddressTranslator />
 
-Things to try in the widget above:
+Try these in the widget:
 
-1. Translate the **code** address twice. The first access misses the TLB and walks; the second is a hit.
-2. Try **heap (first touch)**: the walk finds `Present = 0`, the kernel handles a page fault, and the access
-   retries.
-3. Try **NULL** and **kernel**: both end in `SIGSEGV`, for different reasons.
-4. Run **sequential 16 KiB**: 256 accesses touch only 4 pages, so almost everything hits.
-5. Run **stride 4 KiB × 8 pages** twice: every access is a new page, and with only 4 TLB entries and LRU
-   replacement, the TLB thrashes even on the second run.
+1. Translate the **code** address twice. The first time misses the TLB and walks the tree. The second time
+   is a hit.
+2. Try **heap (first touch)**. The walk finds the page is not present, so the kernel handles a page fault.
+   Then the access runs again.
+3. Try **NULL** and **kernel**. Both crash, for different reasons.
+4. Run **sequential 16 KiB**. 256 accesses touch only 4 pages, so almost all of them hit.
+5. Run **stride 4 KiB × 8 pages** twice. Every access is to a new page. The TLB holds only 4 translations, so
+   it keeps throwing out the ones it will need next, even on the second run.
 
-### The TLB and context switches
+### The TLB when switching processes
 
-TLB entries belong to one address space. When the CPU switches to another process, the old translations are
-wrong for the new one. There are two ways to handle this:
+**In short:** another process means other translations, so the TLB must be cleared or its entries tagged.
+Switching between threads does not have this cost.
 
-- **Flush the TLB** on every switch. This was the classic x86 behaviour on a CR3 write. The new process
-  starts with a cold TLB and pays a burst of misses.
-- **Tag the entries** with an address-space ID (**PCID** on x86, **ASID** on ARM). Entries from other
-  processes simply don't match, so nothing needs flushing, and a process switched back in may still find its
-  entries warm.
+TLB entries belong to one address space. When the CPU switches to another process, the cached translations
+are wrong for the new process. There are two ways to deal with that:
 
-Kernel mappings are the same in every process, so they're marked **Global** and survive switches either way.
+- **Clear the TLB.** This is simple, but the new process starts with an empty TLB and pays for many misses.
+- **Tag each entry** with an ID for its address space. Entries with another ID do not match, so nothing
+  needs clearing. When a process runs again, some of its translations may still be there.
 
-This is also one concrete reason **switching between threads of the same process is cheaper than switching
-between processes**: threads share one address space, so CR3 doesn't change and the TLB stays valid.
+A <Term id="thread">thread</Term> is a line of execution inside a process, and threads of one process share
+its address space. So a switch between two threads of the same process keeps the same page table and keeps
+the TLB valid. This is one concrete reason why a thread switch costs less than a process switch.
 
-::: warning Meltdown and KPTI
-After the Meltdown vulnerability (2018), Linux adopted **kernel page-table isolation (KPTI)** on affected
-CPUs: user space runs with page tables that map almost none of the kernel, so every syscall and interrupt
-switches CR3 twice. Without PCID that would flush the TLB on every syscall; PCID is what keeps KPTI's cost
-tolerable. More in [Security & Isolation](/systems/security).
+::: details Going deeper: PCID, ASID and KPTI
+- The tags are called **PCID** on x86 and **ASID** on ARM.
+- Kernel translations are marked **Global**, so they stay in the TLB during any switch.
+- In 2018 the **Meltdown** attack showed that user programs could read kernel memory through a CPU flaw. The
+  Linux fix, **KPTI** (kernel page-table isolation), gives user mode a page table without most kernel
+  memory. Now every <Term id="syscall">system call</Term> switches page tables twice. Tagged TLB entries are
+  what keep that affordable. [Chapter 17](/systems/security) covers this.
 :::
 
 ### TLB shootdowns
 
-TLBs are **not** kept coherent with page tables by hardware. If the kernel changes or removes a mapping, for
-example on `munmap`, `mprotect`, page migration or reclaim, other cores running the same process may still
-hold the old translation.
+**In short:** when the kernel changes a translation, it must interrupt other cores to clear their old copy.
 
-The kernel must therefore send an **inter-processor interrupt (IPI)** to each of those cores, telling them to
-invalidate the entry, and usually wait for them to acknowledge. This is a **TLB shootdown**.
+The hardware does not keep TLBs up to date with the page tables. Suppose the kernel removes a mapping, for
+example because the program released memory. Other cores running the same process may still hold the old
+translation in their TLB.
 
-Shootdowns are expensive and grow with the number of cores the process runs on. A heavily multithreaded
-program that frequently unmaps memory (for instance, an allocator returning memory to the OS with
-`madvise(MADV_DONTNEED)` on every free) can lose a lot of time to them. On Linux you can see the count in
-`/proc/interrupts` on the `TLB` line.
+So the kernel sends an <Term id="interrupt">interrupt</Term> to each of those cores, telling them to drop the
+entry. It usually waits until all of them confirm. This is called a **TLB shootdown**.
+
+Shootdowns get more expensive as a process runs on more cores. A program with many threads that often
+releases memory can lose a lot of time to them. Some memory allocators do this on every `free`.
+
+::: details Going deeper: where to see them
+Operations that trigger shootdowns include `munmap`, `mprotect`, `madvise(MADV_DONTNEED)`, moving pages
+between NUMA nodes, and reclaiming memory. On Linux, `/proc/interrupts` has a `TLB` line counting them per
+core. The interrupts between cores are called IPIs (inter-processor interrupts).
+:::
 
 ## Page faults
 
-When the MMU can't complete a translation, because the entry isn't present or the access isn't permitted,
-it raises a **page fault** exception. The CPU saves the faulting address (in CR2 on x86) and jumps into the
-kernel's page-fault handler.
+**In short:** when the hardware cannot translate an address, it hands the problem to the kernel. The kernel
+either supplies the page, or stops the program.
+
+The MMU cannot always finish a translation. The entry may be marked not present, or the access may not be
+allowed, such as a write to a read-only page. Then the CPU stops the instruction and jumps into the kernel.
+This is a <Term id="page-fault">page fault</Term>.
 
 <PageFaultDiagram />
 
-The handler first looks up the faulting address in the process's list of **virtual memory areas (VMAs)**.
-A VMA describes one contiguous region: its start and end, permissions, and what backs it (a file, or
-anonymous memory). You'll see VMAs again in `/proc/<pid>/maps`. The outcome is one of:
+The kernel keeps a list of the **memory regions** each process owns. A
+<Term id="vma">memory region</Term> is a continuous range of addresses with one set of permissions and one
+source of data, such as the heap, the stack, or a mapped file. The kernel first checks which region the
+address belongs to. There are three possible outcomes:
 
-| Kind | What happened | Typical cost |
+| Kind | What happened | Cost |
 |---|---|---|
-| **Minor fault** | The page can be provided without I/O: first touch of anonymous memory (a fresh zeroed frame), a file page already in the page cache but not yet mapped by this process, or a copy-on-write copy. | Around a microsecond or less |
-| **Major fault** | The data must be read from storage: a file page not in the page cache, or a page that was swapped out. The thread blocks. | ~100 µs on SSD, ~10 ms on a spinning disk |
-| **Invalid access** | No VMA contains the address, or the access breaks its permissions. | The process gets `SIGSEGV` (or `SIGBUS` in some mmap cases) |
+| **Minor fault** | The data is already available in RAM, or the page just needs a new empty frame. | About a microsecond |
+| **Major fault** | The data must be read from disk: a file not in memory yet, or a page moved to swap. The thread waits. | About 100 µs on an SSD, about 10 ms on a hard disk |
+| **Invalid access** | The address is in no region, or the access is not allowed. | The process gets a <Term id="sigsegv">segmentation fault</Term> and usually crashes |
 
-After a successful minor or major fault, the kernel writes the page table entry and returns. The CPU
-**re-executes the faulting instruction**, which now succeeds. The program never knows a fault happened, only
-that the instruction took longer.
+After a minor or major fault, the kernel fills in the page table entry and returns. The CPU then **runs the
+same instruction again**, and this time it works. The program cannot tell a fault happened. The instruction
+just took longer.
 
-### Demand paging
+::: details Going deeper: what "already in RAM" means
+A minor fault covers several cases:
+- First touch of new memory: the kernel gives the page a fresh frame filled with zeros.
+- A file page that is already in the <Term id="page-cache">page cache</Term> because another process or an
+  earlier read loaded it.
+- A <Term id="copy-on-write">copy-on-write</Term> page after `fork`: the kernel copies it and makes the copy
+  writable.
 
-Linux almost never allocates physical memory when you ask for it. `mmap` and `malloc` only create or extend a
-VMA, which is just bookkeeping. Frames are assigned lazily, one page at a time, by the fault handler when a
-page is first touched. This is **demand paging**.
+On x86 the CPU records the faulting address in a register called **CR2**. Linux calls memory regions
+**VMAs** (virtual memory areas). An access beyond the end of a mapped file raises `SIGBUS` instead of
+`SIGSEGV`.
+:::
 
-Some consequences worth knowing:
+### Memory on demand
 
-- `malloc(1 GiB)` returns immediately and RSS doesn't move until you write to the memory.
-- Reading an untouched anonymous page maps a shared, read-only **zero page**; only a write allocates a
-  private frame.
-- Because allocation is lazy, the kernel can promise more memory than exists (**overcommit**). The bill arrives
-  later, at page-fault time, possibly as a visit from the OOM killer. That story is in
-  [Kernel Memory Management](/memory/kernel-memory).
-- The cost of allocation moves from the `malloc` call to the **first access**, which may be in a hot path.
+**In short:** asking for memory only reserves addresses. RAM is given page by page, the first time each page
+is used.
+
+When a program asks for memory with `malloc` or <Term id="mmap">`mmap`</Term>, the kernel only records a new
+or bigger memory region. No RAM is used yet. The first time the program touches each page, a page fault
+occurs, and the kernel gives that page a frame. This is called **demand paging**.
+
+This has consequences you should know:
+
+- `malloc(1 GiB)` returns immediately. RAM use does not grow until the program writes to that memory.
+- Reading a page that was never written returns zeros, without using a new frame. Only writing uses one.
+- The kernel can promise more memory than the machine has. If programs then use it all, the kernel runs out
+  later, at a page fault, and may kill a process. [Chapter 5](/memory/kernel-memory) covers this.
+- The cost of getting memory moves from the `malloc` call to the **first use**, which may be in the middle of
+  handling a request.
 
 ### Try it: watch page faults happen
 
-This program maps 256 MiB, touches one byte per page twice, and counts minor faults with `getrusage`:
+This program reserves 256 MiB, writes one byte to each page twice, and counts minor faults each time:
 
 ```c
 // faults.c: gcc -O2 faults.c -o faults && ./faults
@@ -305,7 +362,7 @@ int main(void) {
         long f0 = minor_faults();
         double t0 = now_ms();
         for (size_t off = 0; off < size; off += page)
-            p[off] = 1;                        // touch one byte per page
+            p[off] = 1;                        // write one byte per page
         printf("pass %d: %6ld minor faults, %7.1f ms\n",
                pass, minor_faults() - f0, now_ms() - t0);
     }
@@ -320,33 +377,39 @@ pass 1:  65536 minor faults,    60.3 ms
 pass 2:      0 minor faults,     2.1 ms
 ```
 
-The first pass takes one fault per page (256 MiB / 4 KiB = 65,536); the second pass takes none and is far
-faster. If transparent huge pages are set to `always` on your machine
-(`cat /sys/kernel/mm/transparent_hugepage/enabled`), you may see only ~128 faults, one per 2 MiB, which is a
-nice preview of the huge pages section. Adding `MAP_POPULATE` to the `mmap` flags moves all the faults into
-the `mmap` call itself.
+The first pass has one fault per page: 256 MiB / 4 KiB = 65,536. The second pass has none and is about 30
+times faster. That difference is the cost of demand paging.
+
+::: details Going deeper: variations to try
+- If your machine uses huge pages automatically (`cat /sys/kernel/mm/transparent_hugepage/enabled` shows
+  `[always]`), you may see only about 128 faults, one per 2 MiB.
+- Add `MAP_POPULATE` to the `mmap` flags. The kernel then supplies all pages inside `mmap`, and both passes
+  show 0 faults.
+:::
 
 ## The process address space
 
-Putting it together, here is a typical Linux x86-64 process:
+**In short:** each process's address space has the same basic layout, with code at the bottom, the stack
+near the top, and the kernel above.
+
+Here is a typical Linux x86-64 process:
 
 <AddressSpaceDiagram />
 
-A few things to notice:
+Things to notice:
 
-- **Text** (code) is read-only and executable, **data** and **heap** are writable but not executable.
-  Position-independent executables (the default on modern distros) are loaded near `0x55…` rather than
-  `0x400000`.
-- The heap grows up (traditionally via `brk`), while the stack and the mmap region grow down. Big `malloc`
-  requests usually become their own anonymous `mmap`.
-- **ASLR** randomises the starting points of the stack, heap, mmap region and (for PIE) the executable, so
-  attackers can't hard-code addresses.
-- The **kernel's upper half is mapped into every process**, protected by the U/S bit. That's why a syscall
-  doesn't need a page-table switch (KPTI aside).
-- Page 0 and the pages around it are never mapped, so dereferencing `NULL` faults instead of reading garbage.
+- **Code** is read-only and executable. **Data**, the **heap** and the **stack** are writable but not
+  executable.
+- The heap grows up. The stack grows down. Large `malloc` requests usually get their own separate region.
+- The starting positions of the stack, heap and libraries are **randomised** on each run. This makes attacks
+  harder, because attackers cannot predict addresses.
+- **The kernel is mapped into every process**, in the top half, but user code cannot access it. So a system
+  call can run kernel code without switching page tables (except with KPTI, described above).
+- The lowest addresses are never mapped. That is why using a `NULL` pointer crashes immediately instead of
+  reading garbage.
 
-You can inspect the VMAs of any process. Each line is one VMA: address range, permissions (`p` = private,
-`s` = shared), file offset, device, inode, and the backing file:
+You can list the memory regions of any process. Each line is one region: the address range, the
+permissions, and what backs it:
 
 ```text
 $ cat /proc/self/maps
@@ -356,265 +419,293 @@ $ cat /proc/self/maps
 7f5c8a800000-7f5c8a828000 r--p 00000000 08:01 1314302   /usr/lib/x86_64-linux-gnu/libc.so.6
 7f5c8a828000-7f5c8a9bd000 r-xp 00028000 08:01 1314302   /usr/lib/x86_64-linux-gnu/libc.so.6
 7ffd5c3f1000-7ffd5c412000 rw-p 00000000 00:00 0         [stack]
-7ffd5c5b6000-7ffd5c5b8000 r-xp 00000000 00:00 0         [vdso]
 ```
 
-::: tip VSZ vs RSS
-**VSZ** (virtual size) is the total size of all VMAs. **RSS** (resident set size) is how much is actually in
-RAM right now. A huge VSZ is normal and usually harmless: Go and Java runtimes, allocators and GPU drivers
-reserve large virtual ranges up front. When someone says "this process uses 40 GB", ask which number they
-mean.
+In the permissions column, `r`, `w` and `x` mean read, write and execute. `p` means private to this
+process; `s` would mean shared.
+
+::: tip Two ways to measure memory
+- **Virtual size (VSZ):** the total size of all regions. It includes reserved addresses that have no RAM.
+- **Resident size (<Term id="rss">RSS</Term>):** how much is actually in RAM right now.
+
+A very large virtual size is normal. Go and Java runtimes, memory allocators and GPU drivers reserve big
+address ranges in advance. When someone says "this process uses 40 GB", ask which of the two they mean.
+:::
+
+::: details Going deeper: the executable's position
+Modern Linux executables are position-independent (PIE), so they load near `0x55…` or `0x56…`, as in the
+output above. Older, non-PIE executables load at the fixed address `0x400000`, as in the diagram.
 :::
 
 ## Huge pages
 
-x86-64 can also map memory in larger units by ending the walk early: an entry in the page directory maps a
-**2 MiB** page (three-level walk), and an entry in the PDPT maps a **1 GiB** page (two-level walk).
+**In short:** bigger pages mean each TLB entry covers more memory. They speed up programs with large data,
+but can cause memory waste and delays.
+
+The tree can also stop early. An entry one level up can map a whole <Term id="huge-page">huge page</Term>
+of **2 MiB**. An entry two levels up can map **1 GiB**.
 
 **Benefits:**
 
-- **512× the TLB reach** per entry for 2 MiB pages, so far fewer TLB misses on large working sets.
-- **Shorter walks** when a miss does happen.
-- **Fewer page-table pages**, which saves memory and makes `fork` cheaper.
-- **Fewer page faults** when populating large regions.
+- Each TLB entry covers 512 times more memory with 2 MiB pages, so far fewer TLB misses.
+- A TLB miss needs fewer reads, because the walk is shorter.
+- Page tables are smaller, which also makes `fork` faster.
+- Filling a large region takes far fewer page faults.
 
 **Costs:**
 
-- **Memory bloat.** Touching one byte of a 2 MiB region commits all 2 MiB.
-- **Expensive faults.** Each fault must zero 2 MiB instead of 4 KiB.
-- **Needs contiguous physical memory.** On a long-running, fragmented system, the kernel may have to
-  **compact** memory (move pages around) to create a free 2 MiB block, and that can stall the faulting
-  thread.
+- **Wasted memory.** Using one byte of a 2 MiB page still uses all 2 MiB of RAM.
+- **Slower faults.** The kernel must fill 2 MiB with zeros instead of 4 KiB.
+- **They need 2 MiB of continuous free RAM.** After a machine runs for a long time, free RAM is scattered.
+  The kernel may have to move pages around to make space. The thread that caused the fault waits while it
+  does this.
 
-Linux offers two mechanisms:
+Linux offers huge pages in two ways:
 
-- **hugetlbfs**: explicit huge pages, reserved ahead of time (`vm.nr_hugepages`) and used via `mmap` with
-  `MAP_HUGETLB` or a hugetlbfs mount. Predictable and never swapped, but must be planned and sized. Common
-  for databases like Oracle and PostgreSQL (`huge_pages = on`), DPDK and VMs.
-- **Transparent huge pages (THP)**: the kernel uses 2 MiB pages automatically for anonymous memory, either for
-  everything (`always`), only for regions marked with `madvise(MADV_HUGEPAGE)` (`madvise`), or not at all
-  (`never`). A background thread, `khugepaged`, collapses runs of small pages into huge ones.
+- **Reserved huge pages (hugetlbfs):** an administrator reserves them in advance, and programs ask for them
+  explicitly. Predictable, but needs planning. Used by databases such as PostgreSQL and Oracle, and by
+  virtual machines.
+- **Transparent huge pages (THP):** the kernel uses them automatically. It can do this for all memory
+  (`always`), only for memory a program marks (`madvise`), or not at all (`never`). A background kernel
+  thread also merges small pages into huge ones.
 
-::: warning The THP trade-off in practice
-Several databases, Redis and MongoDB among them, have long recommended disabling THP (or setting it to
-`madvise`) because of latency spikes from compaction and `khugepaged`, memory bloat, and more expensive
-copy-on-write after `fork`. Meanwhile JVMs, ML training jobs and HPC codes often turn huge pages **on** for
-throughput. The answer depends on whether you care more about **average throughput** or **tail latency**, and
-that's precisely the kind of reasoning senior interviews look for.
+::: warning The trade-off in practice
+Several databases, including Redis and MongoDB, have long recommended turning THP off, or setting it to
+`madvise`. The reasons are delays from rearranging memory, wasted memory, and more copying after `fork`. On
+the other hand, Java servers, ML training and scientific computing often turn huge pages **on** for speed.
+
+The right choice depends on what you care about more: **average throughput** or **worst-case latency**.
+Interviewers look for exactly this kind of reasoning.
+:::
+
+::: details Going deeper: the kernel names
+The background thread that merges pages is `khugepaged`. Rearranging memory to make continuous free space is
+called **compaction**. Reserved huge pages are set with the `vm.nr_hugepages` setting and used with
+`mmap(..., MAP_HUGETLB)`. A 2 MiB page is mapped by a level-2 entry (page directory) with its page-size flag
+set.
 :::
 
 ## Why this matters in real systems
 
-**Page faults in the hot path.** Because allocation is lazy, the first request that touches new memory pays
-for the faults. Latency-sensitive systems pre-fault at startup: `MAP_POPULATE`, touching every page, or the
-JVM's `-XX:+AlwaysPreTouch`. Systems that can't tolerate a major fault at all (trading, audio, some real-time
-control) use `mlock` / `mlockall` to pin their memory in RAM.
+**Page faults while handling requests.** Memory is supplied on first use, so the first request that touches
+new memory pays for the page faults. Services that need steady latency touch all their memory at startup.
+Examples are `MAP_POPULATE`, or the JVM's `-XX:+AlwaysPreTouch` flag. Systems that can never wait for disk
+use `mlock` to keep their memory in RAM. Trading and audio systems do this.
 
-**Random access over large memory.** Hash tables, indexes, graph workloads and embedding lookups can be
-TLB-bound rather than cache-bound. If `perf` shows many `dTLB-load-misses`, huge pages are often the fix.
+**Programs that jump around large memory.** Hash tables, indexes, graph workloads and embedding lookups can
+be slowed more by TLB misses than by cache misses. If profiling shows many TLB misses, huge pages often
+help.
 
-**`fork` of a large process.** Redis snapshots (BGSAVE) by forking. `fork` doesn't copy data, thanks to
-copy-on-write, but it **does copy page tables**: about 8 bytes per 4 KiB page, so ~100 MB of page tables for
-50 GB of RSS. That can freeze the parent for tens to hundreds of milliseconds. After the fork, every page the
-parent writes triggers a CoW copy, so a write-heavy parent can nearly double its memory use during a
-snapshot.
+**`fork` of a large process.** Redis saves snapshots by calling <Term id="fork">`fork`</Term> and letting the
+child write the data. `fork` does not copy data, thanks to copy-on-write. But it **does copy the page
+tables**: about 8 bytes for every 4 KiB page, so about 100 MB for 50 GB of memory. That can pause Redis for
+tens to hundreds of milliseconds. Afterwards, each page the parent writes gets copied, so a busy Redis can
+almost double its memory use during a snapshot.
 
-**`mmap` for file I/O.** Mapping a file lets you read it like memory and lets processes share page-cache
-pages. It's a popular way to load model weights (for example, safetensors and llama.cpp mmap weight files)
-because loading is lazy and pages are shared between processes. But in a database it hands control of I/O to
-the kernel: page faults are blocking I/O you can't schedule, make asynchronous or prioritise, and eviction is
-the kernel's decision. See Crotty, Leis and Pavlo, *"Are You Sure You Want to Use MMAP in Your Database
-Management System?"* (CIDR 2022), for the case against.
+**Reading files with `mmap`.** Mapping a file lets a program read it like memory. Several processes can
+share the same pages. This is popular for loading ML model weights, because loading is lazy and shared. But
+for a database it has a cost: disk reads happen inside page faults. The database cannot schedule them, run
+them in the background, or choose what to evict. The paper *"Are You Sure You Want to Use MMAP in Your
+Database Management System?"* (Crotty, Leis and Pavlo, 2022) explains the problems.
 
-**Containers and memory accounting.** Container limits (cgroups) count resident memory, including page cache,
-not virtual size. Understanding RSS vs VSZ vs page cache prevents a lot of wrong conclusions from `top`.
+**Containers.** Container memory limits (set with <Term id="cgroup">cgroups</Term>) count memory that is
+really in RAM, including cached file data, not virtual size. Knowing the difference prevents wrong
+conclusions from tools like `top`.
 
-**GPUs and DMA.** Devices that copy memory directly (DMA), such as GPUs and NICs, need the physical frames to
-stay put. That's why CUDA has **pinned (page-locked) host memory**: the kernel promises not to swap or move
-those pages, which makes host-to-device transfers faster but reduces memory the kernel can manage.
+**GPUs.** A GPU copies data from RAM by itself, using <Term id="dma">DMA</Term>. For that, the data must
+stay at the same physical location. So CUDA offers **pinned memory**: RAM the kernel promises not to move or
+<Term id="swap">swap</Term> out. Transfers are faster, but the kernel has less memory it can manage.
 
-**Measuring it.** Useful tools, from quick to deep:
+**How to measure it:**
 
 ```bash
-/usr/bin/time -v ./prog            # "Minor/Major page faults" and max RSS
+/usr/bin/time -v ./prog            # minor and major page faults, peak memory
 ps -o pid,min_flt,maj_flt,rss,vsz -p <pid>
 perf stat -e page-faults,major-faults,dTLB-load-misses ./prog
-grep -E 'thp|compact' /proc/vmstat # THP allocations, compaction stalls
-cat /proc/<pid>/smaps_rollup       # RSS / PSS breakdown, AnonHugePages
+grep -E 'thp|compact' /proc/vmstat # huge page and compaction counters
 ```
 
 ## Interview questions
 
-Try answering each one out loud before opening the model answer.
+Answer each question out loud before you open the model answer.
 
 ::: details 1. What is virtual memory, and why do we need it?
-Virtual memory gives each process its own private address space. Every memory access uses a virtual address,
-which the MMU translates to a physical address using page tables maintained by the kernel.
+Each process gets its own private address space. The program uses virtual addresses. On every access, the
+hardware translates them to real RAM addresses, using page tables that the kernel keeps for each process.
 
-It gives us **isolation** (processes can't touch each other's memory), a **simple and uniform layout** for
-every program, **no external fragmentation** because pages map to any free frame, **sharing** of libraries
-and memory, **lazy allocation** and overcommit, **copy-on-write** `fork`, **memory-mapped files**,
-per-page **protection** (read-only code, non-executable stacks), and **swapping**.
+This gives us protection between processes, the same simple layout for every program, and no fragmentation
+of RAM. It also makes possible shared libraries, memory on demand, cheap `fork`, memory-mapped files,
+per-page permissions and swap.
 
-Senior add-on: the key design point is that translation is done by hardware on every access, while policy
-lives in the kernel and only runs on faults. That's what makes it both fast and flexible.
+**Senior add-on:** the key design choice is the split. Hardware does the translation on every access, so it
+is fast. The kernel only runs when the hardware cannot translate, so it keeps full control without slowing
+down normal accesses.
 :::
 
-::: details 2. Walk me through what happens when a program loads from a virtual address.
-1. The CPU looks the page number up in the **TLB**. On a hit, it gets the frame number and permissions and
-   the load proceeds through the caches as normal.
-2. On a miss, the **hardware page walker** starts at **CR3** and follows four levels (PML4 → PDPT → PD → PT),
-   using 9 bits of the address at each level. Those reads can hit in the CPU caches.
-3. If the final entry is present and permits the access, the translation is inserted in the TLB and the load
-   completes.
-4. If not, the MMU raises a **page fault**. The kernel looks up the VMA for the address:
-   - no VMA or wrong permissions → `SIGSEGV`;
-   - otherwise it resolves a **minor** fault (zero page, page-cache hit, CoW copy) or a **major** fault (read
-     from disk or swap, blocking the thread), updates the PTE and returns.
-5. The CPU **retries** the instruction, which now succeeds.
+::: details 2. What happens when a program reads from a virtual address?
+1. The CPU checks the **TLB**. If the translation is there, it reads the data straight away.
+2. If not, the CPU **walks the page table**: four levels on x86-64, one memory read each.
+3. If the final entry says the page is present and the access is allowed, the CPU saves the translation in
+   the TLB and reads the data.
+4. Otherwise it raises a **page fault** and the kernel takes over. If the address is not in any region the
+   process owns, or the access is not allowed, the process gets a segmentation fault. If it is valid, the
+   kernel supplies the page: from memory (minor fault) or from disk (major fault). Then it updates the page
+   table.
+5. The CPU runs the instruction again, and it succeeds.
 
-Mentioning Accessed/Dirty bits being set by hardware, and that the cost ranges from ~1 cycle (TLB hit) to
-milliseconds (major fault), makes the answer stand out.
+**Senior add-on:** mention the cost range. A TLB hit is almost free. A walk costs tens to hundreds of cycles.
+A major fault can cost milliseconds. Mention also that the hardware sets the Accessed and Dirty flags, which
+the kernel later uses to choose pages to evict.
 :::
 
-::: details 3. Why are page tables multi-level? What's the trade-off?
-A flat table covering a 48-bit address space would need hundreds of GiB per process, and almost all entries
-would be empty because address spaces are sparse. A multi-level table is a radix tree: subtrees for unused
-regions are simply absent, so memory use is proportional to what the process actually maps.
+::: details 3. Why is the page table a multi-level tree? What is the trade-off?
+A flat table covering the whole address space would take hundreds of GiB per process. Almost all of it
+would be empty, because processes use only small parts of their address space. A tree only has tables for
+the parts in use.
 
-The trade-off is **walk length**: each level adds a dependent memory read on a TLB miss (4 on x86-64, 5 with
-5-level paging). That's mitigated by the TLB, by paging-structure caches in the MMU, by the data caches, and by
-huge pages, which shorten the walk.
+The trade-off is that each level adds one memory read when the TLB misses. x86-64 has four levels, and newer
+CPUs can use five.
+
+**Senior add-on:** the extra reads are softened by the TLB, by special caches for upper tree levels, by the
+normal CPU caches, and by huge pages, which shorten the walk.
 :::
 
-::: details 4. What is the TLB and what happens to it on a context switch?
-It's a per-core cache of virtual → physical translations plus permissions, which avoids a page walk on almost
-every access.
+::: details 4. What is the TLB, and what happens to it on a context switch?
+The TLB is a small cache in each CPU core that holds recent translations. It lets almost every access skip
+the page walk.
 
-On a switch to a different process the translations are no longer valid. Either the TLB is flushed (classic
-behaviour on a CR3 write), leaving the new process to warm it up again, or entries are tagged with a
-**PCID/ASID** so the old ones just don't match and nothing needs flushing. Kernel entries are **global** and
-survive either way. Switching between threads of the same process doesn't touch the TLB at all, since they
-share page tables.
+When the CPU switches to a different process, the cached translations no longer apply. The CPU either clears
+the TLB, or it tags each entry with an address-space ID so old entries simply do not match. Switching
+between threads of the same process changes nothing, because they share one page table.
 
-Follow-up worth knowing: under KPTI (the Meltdown mitigation), even syscalls switch page tables, which is why
-PCID support matters so much for syscall-heavy workloads.
+**Senior add-on:** the tags are PCID on x86 and ASID on ARM. Kernel entries are marked global and survive any
+switch. Since the Meltdown fix (KPTI), even system calls switch page tables, so PCID support matters a lot
+for programs that make many system calls.
 :::
 
-::: details 5. Minor vs major page faults: what are they, and how would you measure them?
-A **minor** fault is resolved without I/O: first-touch of anonymous memory, a file page already in the page
-cache, or a CoW copy. It costs around a microsecond. A **major** fault needs I/O, either reading a file page
-or swapping a page back in, and blocks the thread for ~100 µs (SSD) to ~10 ms (HDD).
+::: details 5. What is the difference between minor and major page faults? How would you measure them?
+A **minor** fault is solved without disk access. Examples: the first write to new memory, a file page already
+in the page cache, or a copy-on-write copy. It costs about a microsecond.
 
-Measure per process with `/usr/bin/time -v`, `ps -o min_flt,maj_flt`, `perf stat -e
-page-faults,major-faults`, or `getrusage` in code; system-wide with `sar -B` or `vmstat` (look at swap-in
-and major faults). A steady stream of major faults on a service usually means memory pressure: the
-working set doesn't fit and pages are being evicted and re-read.
+A **major** fault needs the disk: a file page not yet in memory, or a page that was moved to swap. The thread
+waits for about 100 µs on an SSD, or about 10 ms on a hard disk.
+
+To measure them for one process, use `/usr/bin/time -v`, `ps -o min_flt,maj_flt`, or
+`perf stat -e page-faults,major-faults`. For the whole system, use `vmstat` or `sar -B`.
+
+**Senior add-on:** a steady stream of major faults in a service usually means its working data does not fit
+in RAM. Pages are being evicted and read back again and again.
 :::
 
-::: details 6. A program mallocs 10 GB on a machine with 8 GB of RAM and it succeeds. How? What happens next?
-`malloc` for large sizes calls `mmap`, which only creates a VMA; no physical memory is assigned. Linux's
-default overcommit heuristics allow this. Frames are assigned lazily as pages are touched.
+::: details 6. A program allocates 10 GB on a machine with 8 GB of RAM, and it succeeds. How? What happens next?
+The allocation only reserves addresses. No RAM is used until each page is written. Linux allows reserving more
+than it has by default.
 
-If the program then writes to all 10 GB, the kernel reclaims page cache, swaps if swap is configured, and
-eventually, when it can't free enough, the **OOM killer** picks a process to kill (often this one). The
-failure appears as a kill at some random write, not as a `NULL` return from `malloc`. With
-`vm.overcommit_memory = 2` (strict accounting), the `malloc` would fail up front instead.
+If the program then writes all 10 GB, the kernel frees what it can: it drops cached file data, and moves pages
+to swap if swap exists. When nothing more can be freed, the <Term id="oom-killer">OOM killer</Term> stops a
+process, often this one. So the failure shows up as the process being killed at some random write, not as
+`malloc` returning `NULL`.
+
+**Senior add-on:** the setting `vm.overcommit_memory = 2` makes Linux refuse to promise more than it has. Then
+`malloc` fails immediately instead.
 :::
 
-::: details 7. What are huge pages? When would you use or avoid them?
-Pages of 2 MiB or 1 GiB instead of 4 KiB, created by ending the page walk early. They increase TLB reach by
-512× (or more), shorten walks, reduce page-table memory and reduce the number of faults.
+::: details 7. What are huge pages? When would you use them, and when would you avoid them?
+They are pages of 2 MiB or 1 GiB instead of 4 KiB. One TLB entry then covers far more memory. The page walk
+is shorter, page tables are smaller, and there are fewer page faults.
 
-**Use them** for large, long-lived, densely used memory where TLB misses matter: database buffer pools, JVM
-heaps, in-memory caches, VMs, HPC and ML workloads.
+**Use them** for large, long-lived memory that is used densely: database buffers, Java heaps, in-memory
+caches, virtual machines, ML and scientific workloads.
 
-**Avoid or restrict them** (e.g. THP `madvise` instead of `always`) for latency-sensitive services with sparse
-memory use or frequent `fork`: they can cause memory bloat, expensive faults, compaction stalls and costlier
-copy-on-write. Explicit hugetlbfs pages avoid the compaction problem because they're reserved up front.
+**Avoid them**, or only enable them for chosen memory, in latency-sensitive services that use memory sparsely
+or call `fork` often. There they cause wasted memory, slow faults, pauses while the kernel rearranges memory,
+and more copying after `fork`.
+
+**Senior add-on:** reserved huge pages (hugetlbfs) avoid the rearranging pauses, because the memory is set
+aside at startup. Transparent huge pages in `madvise` mode are a common middle ground.
 :::
 
 ::: details 8. What is a TLB shootdown, and when does it hurt?
-TLBs aren't coherent with page tables. When the kernel removes or changes a mapping that other cores may have
-cached, it must send them IPIs to invalidate those entries and wait for them. That's a TLB shootdown.
+The hardware does not update other cores' TLBs when a page table changes. So when the kernel removes or
+changes a mapping, it must interrupt every other core that might cache it and wait for them to clear it.
 
-It hurts in processes with many threads spread over many cores that frequently change mappings: allocators
-returning memory with `munmap`/`madvise`, frequent `mprotect` (some GCs and JITs), or page migration (NUMA
-balancing). The cost grows with core count. Mitigations: batch or avoid unmapping (allocator settings), keep
-memory mapped and reuse it, and reduce the number of cores a process's threads spread across.
+It hurts in processes with many threads spread across many cores that often change their memory mappings.
+Examples: memory allocators that return memory to the OS often, garbage collectors that change page
+permissions, and the kernel moving pages between memory nodes. The cost grows with the number of cores.
+
+**Senior add-on:** fixes include keeping memory mapped and reusing it, tuning the allocator to return memory
+less often, and limiting how many cores the process's threads spread over.
 :::
 
-::: details 9. Scenario: p99 latency spikes every few minutes on a service, but CPU usage is low. How could memory management be involved?
-Hypotheses to check, roughly in order:
+::: details 9. Scenario: p99 latency spikes every few minutes, but CPU use is low. How could memory be involved?
+Check these, roughly in this order:
 
-1. **Major faults / swapping**: check `maj_flt` and `vmstat` swap-in; the working set may not fit.
-2. **THP compaction or khugepaged**: look at `compact_stall` and `thp_*` counters in `/proc/vmstat`; try THP
-   `madvise` or `never` and compare.
-3. **Direct reclaim**: under memory pressure, allocating threads reclaim memory themselves (`allocstall` in
-   `/proc/vmstat`, or cgroup `memory.pressure` / PSI).
-4. **Large forks** (snapshots, subprocess spawning from a big process) pausing to copy page tables.
-5. **TLB shootdowns** from periodic unmapping (look at the `TLB` line in `/proc/interrupts`).
-6. Also rule out non-memory causes, like GC pauses, which often correlate with memory growth.
+1. **Major faults or swapping.** Look at major fault counts and `vmstat`. The working data may not fit in
+   RAM.
+2. **Huge page rearranging.** Look at the `compact_stall` and `thp_*` counters in `/proc/vmstat`. Try THP
+   in `madvise` or `never` mode and compare.
+3. **Memory pressure.** Under pressure, threads that allocate memory must free memory themselves first. Look
+   at `allocstall` in `/proc/vmstat`, or the memory pressure numbers in `/proc/pressure/memory`.
+4. **A large `fork`**, such as a snapshot, pausing while page tables are copied.
+5. **TLB shootdowns** from memory being released periodically (the `TLB` line in `/proc/interrupts`).
 
-Then confirm with `perf` or eBPF tools (off-CPU analysis, fault tracing) before changing anything. A good
-answer shows a hypothesis → evidence → fix loop rather than jumping to a solution.
+Also rule out causes outside the OS, such as garbage collection pauses.
+
+**Senior add-on:** show a loop of hypothesis, evidence, then fix. Confirm with `perf` or eBPF tracing before
+you change anything.
 :::
 
-::: details 10. mmap a file vs read() it: what are the trade-offs?
-**`mmap`**: no copy from page cache into a user buffer, simple pointer-based access, lazy loading, pages
-shared between processes, and the kernel handles caching. **But**: I/O happens implicitly in page faults,
-which block and can't be made async or prioritised; errors arrive as `SIGBUS` instead of return codes;
-eviction and write-back timing are up to the kernel; remapping and TLB shootdowns cost; and on 32-bit
-systems address space runs out.
+::: details 10. mmap a file or read() it: what are the trade-offs?
+**`mmap`** avoids copying data into a separate buffer, lets you use plain pointers, loads data only when used,
+and lets processes share pages. But disk reads happen inside page faults, so you cannot schedule them or do
+them in the background. Errors arrive as a signal (`SIGBUS`) instead of an error code. The kernel decides
+what to evict and when to write.
 
-**`read`/`pread`** (or `io_uring`): an extra copy, but explicit control over what is read, when, in what
-order and asynchronously, plus clean error handling. Databases usually prefer this, often with their own
-buffer pool and `O_DIRECT`. Read-mostly workloads where simplicity and sharing matter (loading model weights,
-static assets) often prefer `mmap`.
+**`read`** (or `pread`, or `io_uring`) costs one extra copy, but gives full control: what to read, when, in
+what order, in the background, and with clear error codes.
+
+**Senior add-on:** databases usually use `read` with their own cache, often with `O_DIRECT` to bypass the
+page cache. Read-mostly data such as model weights or static files often suits `mmap`.
 :::
 
-::: details 11. How can two processes use the same virtual address for different data? And how do they share memory?
-Each process has its own page tables, so virtual address `0x7f00…` in process A and in process B translate
-through different trees to different frames. The address alone means nothing without the address space.
+::: details 11. How can two processes use the same address for different data? How do they share memory?
+Each process has its own page table. The same virtual address goes through a different tree in each
+process, so it reaches a different frame. An address means nothing without knowing which address space it
+belongs to.
 
-To share, both page tables point at the **same frames**: via `mmap` of the same file with `MAP_SHARED`,
-POSIX/System V shared memory, or implicitly for read-only library code and CoW pages after `fork`. The shared
-region can even sit at different virtual addresses in each process, which is why shared-memory data
-structures use offsets rather than raw pointers.
+To share memory, both page tables point to the **same frames**. This happens with `mmap` of the same file
+using `MAP_SHARED`, with shared memory calls, and automatically for library code and for pages after `fork`.
+
+**Senior add-on:** the shared memory can appear at different addresses in each process. That is why data
+structures in shared memory store offsets, not pointers.
 :::
 
 ## Common misconceptions
 
-- **"Virtual memory means swap."** Swap is one feature built on virtual memory. A machine with no swap at all
-  still uses virtual memory for every access.
-- **"`malloc` allocates physical memory."** It reserves virtual address space. Physical frames arrive on first
-  touch.
-- **"The kernel translates every address."** The MMU does, in hardware. The kernel only builds the tables and
-  handles faults.
-- **"A context switch always flushes the TLB."** Not with PCID/ASID, never for global kernel entries, and
-  never between threads of the same process.
-- **"High VSZ means high memory use."** VSZ counts reservations; RSS and PSS describe real use.
-- **"A segmentation fault is about segments."** The name is historical. On x86-64 it almost always means a
-  page fault that the kernel couldn't resolve: no mapping, or a permission violation.
-- **"Huge pages are always faster."** They usually improve throughput, but can hurt tail latency and memory
-  use.
+- **"Virtual memory means swap."** Swap is one feature that uses virtual memory. A machine without swap still
+  uses virtual memory for every access.
+- **"`malloc` uses RAM."** It reserves addresses. RAM is used when each page is first written.
+- **"The kernel translates every address."** The MMU hardware does. The kernel only sets up the tables and
+  handles page faults.
+- **"Every context switch clears the TLB."** Not with tagged entries, and never between threads of the same
+  process.
+- **"A large virtual size means high memory use."** Virtual size includes reserved addresses. Resident size
+  shows real RAM use.
+- **"Huge pages are always faster."** They usually raise throughput, but can hurt worst-case latency and
+  memory use.
 
 ## Key takeaways
 
-- Virtual memory is **hardware translation plus kernel policy**: the MMU translates every access; the kernel
-  sets up mappings and handles faults.
-- Addresses are split into a page number and an offset; page tables map pages to frames, and are **radix
-  trees** because address spaces are sparse.
-- The **TLB** makes translation nearly free on hits. Think in terms of **TLB reach**. Context switches and
-  unmapping have hidden TLB costs (flushes, shootdowns).
-- **Page faults** are normal: they implement lazy allocation, file mapping and CoW. Minor faults cost ~µs,
-  major faults cost I/O.
-- **Huge pages** trade memory efficiency and tail latency for TLB reach and throughput.
+- The **hardware translates** every access. The **kernel decides** the translations and handles page faults.
+- The page table is a **tree**, because address spaces are mostly empty. Each level costs a memory read.
+- The **TLB** caches translations. Think in terms of **TLB reach**. Process switches and releasing memory
+  have hidden TLB costs.
+- **Page faults are normal.** They supply memory on demand, load files and implement copy-on-write. Minor
+  faults cost about a microsecond; major faults cost a disk read.
+- **Huge pages** trade memory and worst-case latency for speed on large data.
 
 ## Review
 
 <Flashcards id="virtual-memory" :cards="cards" />
-
-<Quiz id="virtual-memory" :questions="quiz" />
 
 <MarkDone id="virtual-memory" />
